@@ -1,3 +1,87 @@
 spring:
   application:
     name: aries-reporting-project
+  datasource:
+    reporting:
+      url: jdbc:postgresql://localhost:5432/aries_reporting_db
+      username: reporting_user
+      password: reporting_pass
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 3
+        pool-name: ReportingPool
+
+    transaction:
+      url: jdbc:postgresql://localhost:5432/aries_transaction_db
+      username: transfer_user
+      password: transfer_pass
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 5
+        minimum-idle: 2
+        pool-name: TransactionPool
+  jpa:
+    open-in-view: false
+
+  flyway:
+    enabled: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+  mail:
+    host: ${MAIL_HOST:smtp.mailtrap.io}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.jobStore.dataSource: reportingDS
+      org.quartz.jobStore.tablePrefix: QRTZ_
+      org.quartz.scheduler.instanceName: AriesReportingScheduler
+      org.quartz.scheduler.instanceId: AUTO
+      org.quartz.threadPool.threadCount: 5
+
+jwt:
+  secret: ${JWT_SECRET:secret}
+
+app:
+  reporting:
+    export-dir: ${EXPORT_DIR:/tmp/aries-exports}
+    export-ttl-hours: 24
+    mail-from: ${MAIL_FROM:noreply@aries.local}
+    cache-ttl-minutes: 10
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.actilazion.aries_reporting: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    org.quartz: INFO
+
+kind: Application
+
+
+
