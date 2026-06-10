@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @Configuration
 @EnableJpaRepositories(
-        basePackages            = "com.actilazion.aries_reporting.repository.transaction",
+        basePackages            = "com.actilazion.ariesreportingproject.repository.transaction",
         entityManagerFactoryRef = "transactionEntityManagerFactory",
         transactionManagerRef   = "transactionTransactionManager"
 )
