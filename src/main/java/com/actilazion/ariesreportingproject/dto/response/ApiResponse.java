@@ -1,4 +1,4 @@
-package com.actilazion.ariesreportingproject.dto;
+package com.actilazion.ariesreportingproject.dto.response;
 
 import java.time.OffsetDateTime;
 
