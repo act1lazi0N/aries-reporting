@@ -39,9 +39,9 @@ CREATE TABLE reporting_transactions (
     CONSTRAINT chk_reporting_hour_of_day      CHECK (hour_of_day BETWEEN 0 AND 23)
 );
 
-COMMENT ON TABLE  reporting_transactions             IS 'Denormalized copy của transactions — OLAP optimised';
-COMMENT ON COLUMN reporting_transactions.day_of_week IS 'Pre-computed ISO day (1=Mon) để tránh EXTRACT() khi query';
-COMMENT ON COLUMN reporting_transactions.synced_at   IS 'Timestamp khi record được sync vào reporting DB';
+COMMENT ON TABLE  reporting_transactions             IS 'Denormalized copy of transactions for OLAP-optimized reporting';
+COMMENT ON COLUMN reporting_transactions.day_of_week IS 'Pre-computed ISO day (1=Mon) to avoid EXTRACT() during queries';
+COMMENT ON COLUMN reporting_transactions.synced_at   IS 'Timestamp when the record was synced into the reporting database';
 
 CREATE TABLE daily_snapshots (
     id               UUID           NOT NULL DEFAULT gen_random_uuid(),
@@ -63,7 +63,7 @@ CREATE TABLE daily_snapshots (
 );
 
 COMMENT ON CONSTRAINT uk_daily_account_date ON daily_snapshots
-    IS 'Idempotency: job chạy lại không tạo duplicate snapshot';
+    IS 'Idempotency: rerunning the job does not create duplicate snapshots';
 
 CREATE TABLE monthly_snapshots (
     id               UUID           NOT NULL DEFAULT gen_random_uuid(),
@@ -86,18 +86,18 @@ CREATE TABLE monthly_snapshots (
 );
 
 COMMENT ON COLUMN monthly_snapshots.is_finalised
-    IS 'TRUE = tháng đã qua, đọc từ snapshot. FALSE = tháng hiện tại, on-the-fly';
+    IS 'TRUE = past month, read from snapshot. FALSE = current month, calculated on the fly';
 
 CREATE TABLE report_jobs (
     id             UUID              NOT NULL DEFAULT gen_random_uuid(),
-    requested_by   UUID              NOT NULL,    -- user id từ JWT
+    requested_by   UUID              NOT NULL,    -- user id from JWT
     job_type       report_job_type   NOT NULL,
     status         report_job_status NOT NULL DEFAULT 'PENDING',
     format         report_format     NOT NULL,
     params         JSONB,                         -- filter params (from, to, accountId...)
-    file_path      VARCHAR(500),                  -- set khi status = READY
-    error_message  VARCHAR(500),                  -- set khi status = FAILED
-    expires_at     TIMESTAMPTZ,                   -- set khi READY, file xóa sau 24h
+    file_path      VARCHAR(500),                  -- set when status = READY
+    error_message  VARCHAR(500),                  -- set when status = FAILED
+    expires_at     TIMESTAMPTZ,                   -- set when READY, file is deleted after 24h
     created_at     TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
     completed_at   TIMESTAMPTZ,
 
@@ -105,7 +105,7 @@ CREATE TABLE report_jobs (
 );
 
 COMMENT ON COLUMN report_jobs.params    IS 'JSONB: {"accountId":"...", "from":"2025-01", "to":"2025-03"}';
-COMMENT ON COLUMN report_jobs.file_path IS 'Absolute path trên server — chỉ expose download URL ra ngoài';
+COMMENT ON COLUMN report_jobs.file_path IS 'Absolute path on the server; only the download URL is exposed externally';
 
 CREATE TABLE email_logs (
     id               UUID         NOT NULL DEFAULT gen_random_uuid(),
@@ -121,7 +121,7 @@ CREATE TABLE email_logs (
 );
 
 COMMENT ON COLUMN email_logs.idempotency_key
-    IS 'Format: {userId}::{billingMonth} — đảm bảo 1 email/user/tháng';
+    IS 'Format: {userId}::{billingMonth}; ensures one email per user per month';
 
 CREATE INDEX idx_rt_from_account  ON reporting_transactions (from_account_id, created_at DESC);
 CREATE INDEX idx_rt_to_account    ON reporting_transactions (to_account_id,   created_at DESC);

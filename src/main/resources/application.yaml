@@ -81,7 +81,5 @@ logging:
     org.hibernate.SQL: WARN
     org.quartz: INFO
 
-kind: Application
-
 
 

@@ -21,7 +21,7 @@ import java.util.Map;
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(
-        basePackages       = "com.actilazion.aries_reporting.repository.reporting",
+        basePackages       = "com.actilazion.ariesreportingproject.repository.reporting",
         entityManagerFactoryRef = "reportingEntityManagerFactory",
         transactionManagerRef   = "reportingTransactionManager"
 )
