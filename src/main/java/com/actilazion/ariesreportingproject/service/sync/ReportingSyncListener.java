@@ -3,26 +3,25 @@ package com.actilazion.ariesreportingproject.service.sync;
 import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.event.TransferCompletedEvent;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Listens for TransferCompletedEvent and persists it to the reporting DB.
  *
- * @Async: runs on a separate thread (exportTaskExecutor),
- *   so it does not block the Transfer System's money transfer flow.
- *   If this listener fails, the original transaction has already been committed
- *   and is not affected.
+ * @Async: runs on a separate thread (exportTaskExecutor), so it does not block
+ *   the transfer system's money transfer flow. If this listener fails, the
+ *   original transaction has already been committed and is not affected.
  *
- * @Transactional: uses reportingTransactionManager (primary)
- *   to write to the reporting DB, not the transfer DB.
+ * @Transactional: uses reportingTransactionManager to write to the reporting DB,
+ *   not the transfer DB.
  *
- * Idempotency: checks existsByOriginalTxId before inserting,
- *   so duplicate events caused by restart or retry do not create duplicates.
+ * Idempotency: checks existsByOriginalTxId before inserting, so duplicate events
+ *   caused by restarts or retries do not create duplicate rows.
  */
 @Slf4j
 @Service
@@ -32,11 +31,11 @@ public class ReportingSyncListener {
 
     @Async("exportTaskExecutor")
     @EventListener
-    @Transactional
+    @Transactional(transactionManager = "reportingTransactionManager")
     public void onTransferCompleted(TransferCompletedEvent event) {
         log.debug("[SYNC] Received event for transactionId={}", event.transactionId());
 
-        // Idempotency check - avoiding duplicate events when firing twice.
+        // Idempotency check: avoid duplicate inserts when the same event is delivered more than once.
         if (reportingTransactionRepository.existsByOriginalTxId(event.transactionId())) {
             log.warn("[SYNC] Duplicate event for transactionId={} - skipped", event.transactionId());
             return;
@@ -54,7 +53,7 @@ public class ReportingSyncListener {
     private ReportingTransaction mapToReportingTransaction(
             TransferCompletedEvent event) {
 
-        // Counting dayOfWeek and hourOfDay at sync — save them to avoid computing when querying
+        // Store dayOfWeek and hourOfDay during sync to avoid computing them during queries.
         short dayOfWeek = (short) event.createdAt()
                 .getDayOfWeek()
                 .getValue();

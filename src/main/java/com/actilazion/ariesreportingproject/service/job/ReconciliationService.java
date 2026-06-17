@@ -25,10 +25,10 @@ public class ReconciliationService {
     private final ReportingTransactionRepository reportingTransactionRepository;
     private final BackfillService backfillService;
 
-    @Scheduled(cron = "0 0 2 * * *", zone="Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "0 0 2 * * *", zone = "Asia/Ho_Chi_Minh")
     public void runReconciliation() {
         OffsetDateTime since = OffsetDateTime.now().minusHours(25);
-        log.info("[RECON] Stating reconciliation since={}", since);
+        log.info("[RECON] Starting reconciliation since={}", since);
 
         long sourceCount = transactionViewRepository.countByCreatedAtAfter(since);
         long reportingCount = reportingTransactionRepository.countByCreatedAtAfter(since);
@@ -37,9 +37,9 @@ public class ReconciliationService {
 
         if (sourceCount != reportingCount) {
             long diff = sourceCount - reportingCount;
-            log.warn("[RECON] MISMATCH detected! diff={} — triggering backfill", diff);
+            log.warn("[RECON] MISMATCH detected. diff={} - triggering backfill", diff);
 
-            // auto backfill mismatch
+            // Backfill the mismatch automatically.
             long synced = backfillService.backfill(since);
             log.info("[RECON] Backfill completed, synced={}", synced);
         } else {

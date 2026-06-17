@@ -5,11 +5,11 @@ import com.actilazion.ariesreportingproject.entity.reporting.MonthlySnapshot;
 import com.actilazion.ariesreportingproject.repository.reporting.DailySnapshotRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.MonthlySnapshotRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,7 +18,6 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -29,11 +28,11 @@ public class SnapshotService {
     private final MonthlySnapshotRepository monthlySnapshotRepository;
 
     /**
-     * Daily snapshot job — run at 00:05 every day.
+     * Daily snapshot job - runs at 00:05 every day.
      * Snapshot the previous day for all accounts containing transactions.
      */
     @Scheduled(cron = "0 5 0 * * *", zone = "Asia/Ho_Chi_Minh")
-    @Transactional
+    @Transactional(transactionManager = "reportingTransactionManager")
     public void runDailySnapshot() {
         LocalDate yesterday = LocalDate.now().minusDays(1);
         log.info("[SNAPSHOT] Running daily snapshot for {}", yesterday);
@@ -64,11 +63,11 @@ public class SnapshotService {
     }
 
     /**
-     * Monthly snapshot job — run at 00:30 on the 1st every month.
-     * Finalise tháng vừa qua.
+     * Monthly snapshot job - runs at 00:30 on the 1st every month.
+     * Finalizes the previous month.
      */
     @Scheduled(cron = "0 30 0 1 * *", zone = "Asia/Ho_Chi_Minh")
-    @Transactional
+    @Transactional(transactionManager = "reportingTransactionManager")
     public void runMonthlySnapshot() {
         YearMonth lastMonth = YearMonth.now().minusMonths(1);
         log.info("[SNAPSHOT] Running monthly snapshot for {}", lastMonth);
