@@ -34,6 +34,7 @@ public class ReportController {
     private final StatementService statementService;
     private final AdminReportService adminReportService;
 
+    // F1 - Account Statement
     @GetMapping("/statement")
     @Operation(summary = "Get account statement for a period")
     public ResponseEntity<ApiResponse<AccountStatementResponse>> getStatement(
@@ -51,6 +52,7 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.ok(res));
     }
 
+    // F2 - Monthly Summary
     @GetMapping("/summary/monthly")
     @Operation(summary = "Get monthly summary for an account")
     public ResponseEntity<ApiResponse<TransactionSummaryResponse>> getMonthlySummary(
@@ -61,6 +63,7 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.ok(statementService.getMonthlySummary(accountId, year, month)));
     }
 
+    // F4 - Admin Overview
     @GetMapping("/admin/overview")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Platform-wide transaction overview (admin only)")
