@@ -10,7 +10,7 @@ public record SpendingPatternResponse(
         UUID accountId,
         String periodFrom,
         String periodTo,
-        List<HourlySlot> hourlySlots,
+        List<HourlySlot> hourlySpending,
         int peakHour
 ) {
     public record HourlySlot(
