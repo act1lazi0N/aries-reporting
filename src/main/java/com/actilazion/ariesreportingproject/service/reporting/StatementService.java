@@ -158,7 +158,7 @@ public class StatementService {
     }
 
     /**
-     * Returns the top N largest transactions in the requested period.
+     * Returns the top N the largest transactions in the requested period.
      */
     @Transactional(transactionManager = "reportingTransactionManager", readOnly = true)
     public List<ReportingTransaction> getTopTransactions(
