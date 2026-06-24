@@ -1,10 +1,9 @@
 package com.actilazion.ariesreportingproject.controller;
 
-import com.actilazion.ariesreportingproject.dto.response.AccountStatementResponse;
-import com.actilazion.ariesreportingproject.dto.response.AdminOverviewResponse;
-import com.actilazion.ariesreportingproject.dto.response.ApiResponse;
-import com.actilazion.ariesreportingproject.dto.response.TransactionSummaryResponse;
+import com.actilazion.ariesreportingproject.dto.response.*;
+import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.service.reporting.AdminReportService;
+import com.actilazion.ariesreportingproject.service.reporting.SpendingPatternService;
 import com.actilazion.ariesreportingproject.service.reporting.StatementService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -23,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.OffsetDateTime;
 import java.time.Year;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -33,7 +33,9 @@ import java.util.UUID;
 public class ReportController {
     private final StatementService statementService;
     private final AdminReportService adminReportService;
+    private final SpendingPatternService spendingPatternService;
 
+    // F1 - Account Statement
     @GetMapping("/statement")
     @Operation(summary = "Get account statement for a period")
     public ResponseEntity<ApiResponse<AccountStatementResponse>> getStatement(
@@ -51,6 +53,7 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.ok(res));
     }
 
+    // F2 - Monthly Summary
     @GetMapping("/summary/monthly")
     @Operation(summary = "Get monthly summary for an account")
     public ResponseEntity<ApiResponse<TransactionSummaryResponse>> getMonthlySummary(
@@ -61,6 +64,21 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.ok(statementService.getMonthlySummary(accountId, year, month)));
     }
 
+    // F3 - Spending Pattern
+    @GetMapping("/spending-pattern")
+    @Operation(summary = "Hourly spending pattern — uses pre-computed hour_of_day")
+    public ResponseEntity<ApiResponse<SpendingPatternResponse>> getSpendingPattern(
+            @RequestParam UUID accountId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            OffsetDateTime from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            OffsetDateTime to
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                spendingPatternService.getSpendingPattern(accountId, from, to)));
+    }
+
+    // F4 - Admin Overview
     @GetMapping("/admin/overview")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Platform-wide transaction overview (admin only)")
@@ -71,5 +89,20 @@ public class ReportController {
             OffsetDateTime to
     ) {
         return ResponseEntity.ok(ApiResponse.ok(adminReportService.getOverview(from, to)));
+    }
+
+    // F5 - Top Transactions
+    @GetMapping("/top-transactions")
+    @Operation(summary = "Top N largest transactions in a period")
+    public ResponseEntity<ApiResponse<List<ReportingTransaction>>> getTopTransactions(
+            @RequestParam UUID accountId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            OffsetDateTime from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            OffsetDateTime to,
+            @RequestParam(defaultValue = "5") int limit
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                statementService.getTopTransactions(accountId, from, to, limit)));
     }
 }
