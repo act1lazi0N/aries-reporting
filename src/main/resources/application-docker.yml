@@ -1,13 +1,13 @@
 spring:
-  # Docker: datasource URL dùng service name thay vì localhost
-  # Các giá trị này được inject từ docker-compose.yml environment block
+  # Docker: datasource URLs use service names instead of localhost
+  # These values are injected from the docker-compose.yml environment block
   datasource:
     reporting:
-      url:      ${SPRING_DATASOURCE_REPORTING_URL}
+      url: ${SPRING_DATASOURCE_REPORTING_URL}
       username: ${SPRING_DATASOURCE_REPORTING_USERNAME}
       password: ${SPRING_DATASOURCE_REPORTING_PASSWORD}
     transaction:
-      url:      ${SPRING_DATASOURCE_TRANSACTION_URL}
+      url: ${SPRING_DATASOURCE_TRANSACTION_URL}
       username: ${SPRING_DATASOURCE_TRANSACTION_USERNAME}
       password: ${SPRING_DATASOURCE_TRANSACTION_PASSWORD}
 
@@ -26,9 +26,9 @@ spring:
 
 logging:
   level:
-    com.actilazion:       INFO
-    org.springframework:  WARN
-    org.hibernate:        WARN
+    com.actilazion: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
@@ -39,4 +39,4 @@ management:
 
 app:
   reporting:
-    export-dir: /app/exports   # mount volume trong docker-compose.yml
+    export-dir: /app/exports   # mounted volume in docker-compose.yml

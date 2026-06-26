@@ -2,35 +2,35 @@ spring:
   jpa:
     properties:
       hibernate:
-        format_sql: false   # tắt format SQL — không cần trên prod
+        format_sql: false   # disable SQL formatting - not needed in prod
 
   quartz:
-    job-store-type: jdbc    # persist job state — survive restart
+    job-store-type: jdbc    # persist job state - survive restarts
 
   datasource:
     reporting:
       hikari:
-        maximum-pool-size:    20    # tăng pool size cho prod traffic
-        minimum-idle:          5
-        connection-timeout:  30000
-        idle-timeout:        600000
-        max-lifetime:       1800000
+        maximum-pool-size: 20    # increase pool size for prod traffic
+        minimum-idle: 5
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
 
     transaction:
       hikari:
-        maximum-pool-size:    10
-        minimum-idle:          2
+        maximum-pool-size: 10
+        minimum-idle: 2
 
 server:
   port: 8081
-  # Bật nếu có reverse proxy (Railway / nginx)
+  # Enable when using a reverse proxy (Railway / nginx)
   forward-headers-strategy: framework
 
 logging:
   level:
-    com.actilazion:           WARN   # chỉ log warning trở lên
-    org.springframework:      WARN
-    org.hibernate:            WARN
+    com.actilazion: WARN   # log warnings and above only
+    org.springframework: WARN
+    org.hibernate: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
@@ -38,11 +38,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health     # chỉ expose health — không expose info/metrics ra ngoài
+        include: health     # expose health only - do not expose info/metrics publicly
   endpoint:
     health:
-      show-details: never   # không lộ thông tin internal ra ngoài
+      show-details: never   # do not expose internal information publicly
 
 app:
   reporting:
-    cache-ttl-minutes: 15   # cache lâu hơn trên prod
+    cache-ttl-minutes: 15   # use a longer cache duration in prod

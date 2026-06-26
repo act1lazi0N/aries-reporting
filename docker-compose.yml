@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     ports:
-      - "6380:6379"   # 6379 đã dùng bởi Transfer System
+      - "6380:6379"   # 6379 is already used by the Transfer System
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -82,7 +82,7 @@ services:
     networks:
       - reporting_net
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # truy cập host từ container
+      - "host.docker.internal:host-gateway"   # access the host from the container
 
 volumes:
   reporting_postgres_data:
