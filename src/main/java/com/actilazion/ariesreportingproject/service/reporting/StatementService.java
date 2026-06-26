@@ -78,7 +78,7 @@ public class StatementService {
         // Current month: query on the fly.
         OffsetDateTime periodStart = from.atDay(1)
                 .atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime periodEnd   = to.atEndOfMonth()
+        OffsetDateTime periodEnd = to.atEndOfMonth()
                 .atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
         if (includesCurrentMonth) {
             OffsetDateTime currentMonthStart = currentMonth.atDay(1)
@@ -89,7 +89,7 @@ public class StatementService {
             BigDecimal currentCredit = transactionRepository.sumCreditByAccountAndPeriod(
                     accountId, currentMonthStart, OffsetDateTime.now());
 
-            totalDebit  = totalDebit.add(currentDebit);
+            totalDebit = totalDebit.add(currentDebit);
             totalCredit = totalCredit.add(currentCredit);
         }
 
@@ -141,7 +141,7 @@ public class StatementService {
         OffsetDateTime start = ym.atDay(1).atStartOfDay().atOffset(ZoneOffset.UTC);
         OffsetDateTime end = OffsetDateTime.now();
 
-        BigDecimal debit  = transactionRepository.sumDebitByAccountAndPeriod(
+        BigDecimal debit = transactionRepository.sumDebitByAccountAndPeriod(
                 accountId, start, end);
         BigDecimal credit = transactionRepository.sumCreditByAccountAndPeriod(
                 accountId, start, end);
@@ -152,7 +152,7 @@ public class StatementService {
                 .month(month)
                 .totalDebit(debit)
                 .totalCredit(credit)
-                .txCount(0)         // On-the-fly txCount can be added with a separate query.
+                .txCount(0) // On-the-fly txCount can be added with a separate query.
                 .isFromSnapshot(false)
                 .build();
     }
