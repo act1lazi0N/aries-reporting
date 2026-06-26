@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: aries-reporting
+
+  # Dual DataSource
+  # Auto-config has been turned off in AriesReportingApplication.java
+  # DataSourceConfig.java autowire 2 separated beans
+  datasource:
+    reporting:
+      url: ${SPRING_DATASOURCE_REPORTING_URL}
+      username: ${SPRING_DATASOURCE_REPORTING_USERNAME}
+      password: ${SPRING_DATASOURCE_REPORTING_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 3
+        pool-name: ReportingPool
+
+    transaction:
+      url: ${SPRING_DATASOURCE_TRANSACTION_URL}
+      username: ${SPRING_DATASOURCE_TRANSACTION_USERNAME}
+      password: ${SPRING_DATASOURCE_TRANSACTION_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 5
+        minimum-idle: 2
+        read-only: true
+        pool-name: TransactionPool
+
+  # JPA
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc.time_zone: UTC
+
+  # Flyway
+  flyway:
+    enabled: false
+
+  # Redis
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000ms
+
+  # Mail
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+  # Quartz
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.jobStore.tablePrefix: QRTZ_
+      org.quartz.scheduler.instanceId: AUTO
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET}
+
+# App
+app:
+  reporting:
+    export-dir: ${EXPORT_DIR:/tmp/aries-exports}
+    export-ttl-hours: ${EXPORT_TTL_HOURS:24}
+    mail-from: ${MAIL_FROM}
+    cache-ttl-minutes: ${CACHE_TTL_MINUTES:10}
+
+# Server
+server:
+  port: ${SERVER_PORT:8081}
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+# Logging
+logging:
+  level:
+    com.actilazion: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN

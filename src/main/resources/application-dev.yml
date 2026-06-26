@@ -1,0 +1,37 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true   # SQL đẹp hơn khi debug local
+
+  # Dev dùng spring-dotenv đọc .env tự động
+  # Không cần override datasource ở đây — đã có trong .env
+
+  quartz:
+    job-store-type: memory   # Dev không cần persist job state
+
+  mail:
+    # Mailtrap sandbox — không gửi email thật
+    # Điền credentials trong .env
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+app:
+  reporting:
+    export-dir: ./exports   # tạo folder exports/ ngay tại project root
+
+server:
+  port: 8081
+
+logging:
+  level:
+    com.actilazion: DEBUG   # xem đầy đủ log khi dev
+    org.hibernate.SQL: DEBUG   # xem SQL query thực thi
+    org.hibernate.type.descriptor.sql: TRACE  # xem bind parameter
+    org.springframework.security: DEBUG
+
+management:
+  endpoint:
+    health:
+      show-details: always   # dev cần xem chi tiết health
