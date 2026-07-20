@@ -9,3 +9,8 @@ target/
 logs/
 /app/exports/
 reporting_postgres_data/
+
+#AGENT
+.codex/
+AGENTS.md
+.agents/
