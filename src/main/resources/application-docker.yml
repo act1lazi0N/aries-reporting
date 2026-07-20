@@ -1,0 +1,42 @@
+spring:
+  # Docker: datasource URLs use service names instead of localhost
+  # These values are injected from the docker-compose.yml environment block
+  datasource:
+    reporting:
+      url: ${SPRING_DATASOURCE_REPORTING_URL}
+      username: ${SPRING_DATASOURCE_REPORTING_USERNAME}
+      password: ${SPRING_DATASOURCE_REPORTING_PASSWORD}
+    transaction:
+      url: ${SPRING_DATASOURCE_TRANSACTION_URL}
+      username: ${SPRING_DATASOURCE_TRANSACTION_USERNAME}
+      password: ${SPRING_DATASOURCE_TRANSACTION_PASSWORD}
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+  quartz:
+    job-store-type: jdbc
+
+logging:
+  level:
+    com.actilazion: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  reporting:
+    export-dir: /app/exports   # mounted volume in docker-compose.yml

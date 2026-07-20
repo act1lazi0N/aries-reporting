@@ -122,6 +122,7 @@ public class ExcelExportService {
             log.info("[EXCEL] Generated {} rows at {}", rowNum, outputPath);
         }
     }
+
     // Style factories
     private CellStyle createTitleStyle(Workbook wb) {
         CellStyle style = wb.createCellStyle();
@@ -148,7 +149,7 @@ public class ExcelExportService {
 
     private CellStyle createAmountStyle(Workbook wb) {
         CellStyle style = wb.createCellStyle();
-        DataFormat fmt  = wb.createDataFormat();
+        DataFormat fmt = wb.createDataFormat();
         style.setDataFormat(fmt.getFormat("#,##0.00"));
         style.setAlignment(HorizontalAlignment.RIGHT);
         return style;

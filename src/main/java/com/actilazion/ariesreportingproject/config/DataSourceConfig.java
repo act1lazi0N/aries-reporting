@@ -20,11 +20,6 @@ import java.util.Map;
 
 @Configuration
 @EnableTransactionManagement
-@EnableJpaRepositories(
-        basePackages       = "com.actilazion.ariesreportingproject.repository.reporting",
-        entityManagerFactoryRef = "reportingEntityManagerFactory",
-        transactionManagerRef   = "reportingTransactionManager"
-)
 public class DataSourceConfig {
     // Primary
     @Primary
@@ -46,7 +41,7 @@ public class DataSourceConfig {
         LocalContainerEntityManagerFactoryBean em =
                 new LocalContainerEntityManagerFactoryBean();
         em.setDataSource(dataSource);
-        em.setPackagesToScan("com.actilazion.aries_reporting.entity.reporting");
+        em.setPackagesToScan("com.actilazion.ariesreportingproject.entity.reporting");
         em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
         em.setJpaPropertyMap(jpaProperties("validate"));
         return em;
@@ -79,9 +74,9 @@ public class DataSourceConfig {
         LocalContainerEntityManagerFactoryBean em =
                 new LocalContainerEntityManagerFactoryBean();
         em.setDataSource(dataSource);
-        em.setPackagesToScan("com.actilazion.aries_reporting.entity.transaction");
+        em.setPackagesToScan("com.actilazion.ariesreportingproject.entity.transaction");
         em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
-        em.setJpaPropertyMap(jpaProperties("none")); // Không ddl-auto trên DB người khác
+        em.setJpaPropertyMap(jpaProperties("none")); // Do not ddl-auto on other user DB
         return em;
     }
 
@@ -95,11 +90,11 @@ public class DataSourceConfig {
     // JPA Properties
     private Map<String, Object> jpaProperties(String ddlAuto) {
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.hbm2ddl.auto",                ddlAuto);
+        props.put("hibernate.hbm2ddl.auto", ddlAuto);
         props.put("hibernate.dialect",
                 "org.hibernate.dialect.PostgreSQLDialect");
-        props.put("hibernate.format_sql",                  true);
-        props.put("hibernate.jdbc.time_zone",              "UTC");
+        props.put("hibernate.format_sql", true);
+        props.put("hibernate.jdbc.time_zone", "UTC");
         return props;
     }
 }

@@ -136,4 +136,32 @@ public interface ReportingTransactionRepository extends JpaRepository<ReportingT
             @Param("from") OffsetDateTime from,
             @Param("to")   OffsetDateTime to
     );
+
+    // Allocate FAILED per hour in a day — using pre-computed hour_of_day
+    @Query("""
+        SELECT t.hourOfDay, COUNT(t)
+        FROM ReportingTransaction t
+        WHERE t.status = 'FAILED'
+          AND t.createdAt BETWEEN :from AND :to
+        GROUP BY t.hourOfDay
+        ORDER BY t.hourOfDay
+        """)
+    List<Object[]> countFailedByHour(
+            @Param("from") OffsetDateTime from,
+            @Param("to")   OffsetDateTime to
+    );
+
+    // List FAILED transactions within a time period.
+    @Query("""
+        SELECT t FROM ReportingTransaction t
+        WHERE t.status = 'FAILED'
+          AND t.createdAt BETWEEN :from AND :to
+        ORDER BY t.createdAt DESC
+        """)
+    Page<ReportingTransaction> findFailedByPeriod(
+            @Param("from") OffsetDateTime from,
+            @Param("to")   OffsetDateTime to,
+            Pageable pageable
+    );
+
 }

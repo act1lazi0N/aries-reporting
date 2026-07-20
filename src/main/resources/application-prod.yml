@@ -1,0 +1,48 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false   # disable SQL formatting - not needed in prod
+
+  quartz:
+    job-store-type: jdbc    # persist job state - survive restarts
+
+  datasource:
+    reporting:
+      hikari:
+        maximum-pool-size: 20    # increase pool size for prod traffic
+        minimum-idle: 5
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+
+    transaction:
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 2
+
+server:
+  port: 8081
+  # Enable when using a reverse proxy (Railway / nginx)
+  forward-headers-strategy: framework
+
+logging:
+  level:
+    com.actilazion: WARN   # log warnings and above only
+    org.springframework: WARN
+    org.hibernate: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health     # expose health only - do not expose info/metrics publicly
+  endpoint:
+    health:
+      show-details: never   # do not expose internal information publicly
+
+app:
+  reporting:
+    cache-ttl-minutes: 15   # use a longer cache duration in prod

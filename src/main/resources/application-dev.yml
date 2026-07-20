@@ -1,0 +1,37 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true   # prettier SQL for local debugging
+
+  # Dev uses spring-dotenv to read .env automatically
+  # No need to override the datasource here - it is already in .env
+
+  quartz:
+    job-store-type: memory   # Dev does not need persisted job state
+
+  mail:
+    # Mailtrap sandbox - does not send real emails
+    # Fill credentials in .env
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+app:
+  reporting:
+    export-dir: ./exports   # creates the exports/ folder at the project root
+
+server:
+  port: 8081
+
+logging:
+  level:
+    com.actilazion: DEBUG   # show full logs in dev
+    org.hibernate.SQL: DEBUG   # show executed SQL queries
+    org.hibernate.type.descriptor.sql: TRACE  # show bind parameters
+    org.springframework.security: DEBUG
+
+management:
+  endpoint:
+    health:
+      show-details: always   # dev needs detailed health information

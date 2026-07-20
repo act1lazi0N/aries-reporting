@@ -4,15 +4,15 @@ services:
     container_name: aries_reporting_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       aries_reporting_db
-      POSTGRES_USER:     reporting_user
-      POSTGRES_PASSWORD: reporting_pass
+      POSTGRES_DB: aries_reporting_db
+      POSTGRES_USER: actilazion
+      POSTGRES_PASSWORD: Densetsuno911*
     ports:
       - "5433:5432"
     volumes:
       - reporting_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U reporting_user -d aries_reporting_db"]
+      test: [ "CMD-SHELL", "pg_isready -U reporting_user -d aries_reporting_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,9 +26,9 @@ services:
     restart: unless-stopped
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     ports:
-      - "6380:6379"   # 6379 đã dùng bởi Transfer System
+      - "6380:6379"   # 6379 is already used by the Transfer System
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,24 +44,24 @@ services:
     ports:
       - "8081:8081"
     environment:
-      SPRING_DATASOURCE_REPORTING_URL:      jdbc:postgresql://postgres-reporting:5432/aries_reporting_db
+      SPRING_DATASOURCE_REPORTING_URL: jdbc:postgresql://postgres-reporting:5432/aries_reporting_db
       SPRING_DATASOURCE_REPORTING_USERNAME: reporting_user
-      SPRING_DATASOURCE_REPORTING_PASSWORD: reporting_pass
+      SPRING_DATASOURCE_REPORTING_PASSWORD: Densetsuno911*
 
-      SPRING_DATASOURCE_TRANSACTION_URL:      jdbc:postgresql://host.docker.internal:5432/aries_transaction_db
+      SPRING_DATASOURCE_TRANSACTION_URL: jdbc:postgresql://host.docker.internal:5432/aries_transaction_db
       SPRING_DATASOURCE_TRANSACTION_USERNAME: transfer_user
-      SPRING_DATASOURCE_TRANSACTION_PASSWORD: transfer_pass
+      SPRING_DATASOURCE_TRANSACTION_PASSWORD: Densetsuno911*
 
       SPRING_DATA_REDIS_HOST: redis-reporting
       SPRING_DATA_REDIS_PORT: 6379
 
       JWT_SECRET: ${JWT_SECRET}
 
-      MAIL_HOST:     ${MAIL_HOST:-sandbox.smtp.mailtrap.io}
-      MAIL_PORT:     ${MAIL_PORT:-587}
+      MAIL_HOST: ${MAIL_HOST:-sandbox.smtp.mailtrap.io}
+      MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM:     ${MAIL_FROM:-noreply@aries.local}
+      MAIL_FROM: ${MAIL_FROM:-noreply@aries.local}
 
       EXPORT_DIR: /app/exports
       SPRING_PROFILES_ACTIVE: docker
@@ -74,7 +74,7 @@ services:
       redis-reporting:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -82,7 +82,7 @@ services:
     networks:
       - reporting_net
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # truy cập host từ container
+      - "host.docker.internal:host-gateway"   # access the host from the container
 
 volumes:
   reporting_postgres_data:
