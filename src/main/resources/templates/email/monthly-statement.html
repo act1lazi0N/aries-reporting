@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Monthly Statement</title>
+</head>
+<body>
+<p>Hello <span th:text="${fullName}">Customer</span>,</p>
+<p>Your Aries monthly statement for <span th:text="${billingMonth}">2026-07</span> is ready.</p>
+<p>Total debit: <span th:text="${totalDebit}">0</span></p>
+<p>Total credit: <span th:text="${totalCredit}">0</span></p>
+<p>Net flow: <span th:text="${netFlow}">0</span></p>
+<p><a th:href="${dashboardUrl}">Open dashboard</a></p>
+</body>
+</html>

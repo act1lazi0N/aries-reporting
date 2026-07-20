@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
@@ -16,10 +17,12 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -77,6 +80,8 @@ class StatementServiceTest {
                 .thenReturn(new BigDecimal("2000000"));
         when(txRepo.sumCreditByAccountAndPeriod(eq(accountId), any(), any()))
                 .thenReturn(new BigDecimal("3000000"));
+        when(txRepo.countByAccountAndPeriod(eq(accountId), any(), any()))
+                .thenReturn(7L);
 
         var result = statementService.getMonthlySummary(
                 accountId, currentMonth.getYear(), currentMonth.getMonthValue());
@@ -84,6 +89,7 @@ class StatementServiceTest {
         assertThat(result.isFromSnapshot()).isFalse();
         assertThat(result.totalDebit()).isEqualByComparingTo("2000000");
         assertThat(result.totalCredit()).isEqualByComparingTo("3000000");
+        assertThat(result.txCount()).isEqualTo(7);
 
         // Snapshot is not queried for the current month
         verifyNoInteractions(snapshotRepo);
@@ -121,5 +127,36 @@ class StatementServiceTest {
         verify(txRepo).findTopByAccountAndPeriod(
                 eq(accountId), eq(from), eq(to),
                 eq(PageRequest.of(0, 5)));
+    }
+
+    @Test
+    @DisplayName("getStatement: future-only range does not include current month totals")
+    void getStatement_futureOnlyRange_doesNotIncludeCurrentMonthTotals() {
+        YearMonth futureMonth = YearMonth.now().plusMonths(1);
+        when(txRepo.findByAccountAndPeriod(eq(accountId), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var result = statementService.getStatement(
+                accountId, futureMonth, futureMonth, PageRequest.of(0, 20));
+
+        assertThat(result.totalDebit()).isEqualByComparingTo("0");
+        assertThat(result.totalCredit()).isEqualByComparingTo("0");
+        assertThat(result.txCount()).isZero();
+        verify(txRepo, never()).sumDebitByAccountAndPeriod(any(), any(), any());
+        verify(txRepo, never()).sumCreditByAccountAndPeriod(any(), any(), any());
+        verify(txRepo, never()).countByAccountAndPeriod(any(), any(), any());
+        verifyNoInteractions(snapshotRepo);
+    }
+
+    @Test
+    @DisplayName("getStatement: rejects inverted month ranges")
+    void getStatement_fromAfterTo_throws() {
+        YearMonth from = YearMonth.now();
+        YearMonth to = from.minusMonths(1);
+
+        assertThatThrownBy(() -> statementService.getStatement(
+                accountId, from, to, PageRequest.of(0, 20)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("from must be before or equal to to");
     }
 }

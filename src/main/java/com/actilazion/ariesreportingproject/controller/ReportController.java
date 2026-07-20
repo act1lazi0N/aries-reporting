@@ -5,6 +5,7 @@ import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransactio
 import com.actilazion.ariesreportingproject.service.reporting.AdminReportService;
 import com.actilazion.ariesreportingproject.service.reporting.SpendingPatternService;
 import com.actilazion.ariesreportingproject.service.reporting.StatementService;
+import com.actilazion.ariesreportingproject.service.security.UserAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,13 +15,14 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.OffsetDateTime;
-import java.time.Year;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
@@ -34,6 +36,7 @@ public class ReportController {
     private final StatementService statementService;
     private final AdminReportService adminReportService;
     private final SpendingPatternService spendingPatternService;
+    private final UserAccessService userAccessService;
 
     // F1 - Account Statement
     @GetMapping("/statement")
@@ -42,8 +45,10 @@ public class ReportController {
             @RequestParam UUID accountId,
             @RequestParam String from,
             @RequestParam String to,
-            @PageableDefault(size = 20) Pageable pageable
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
+        userAccessService.requireAccountAccess(userDetails, accountId);
         AccountStatementResponse res = statementService.getStatement(
                 accountId,
                 YearMonth.parse(from),
@@ -59,8 +64,10 @@ public class ReportController {
     public ResponseEntity<ApiResponse<TransactionSummaryResponse>> getMonthlySummary(
             @RequestParam UUID accountId,
             @RequestParam int  year,
-            @RequestParam int  month
+            @RequestParam int  month,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
+        userAccessService.requireAccountAccess(userDetails, accountId);
         return ResponseEntity.ok(ApiResponse.ok(statementService.getMonthlySummary(accountId, year, month)));
     }
 
@@ -72,8 +79,10 @@ public class ReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            OffsetDateTime to
+            OffsetDateTime to,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
+        userAccessService.requireAccountAccess(userDetails, accountId);
         return ResponseEntity.ok(ApiResponse.ok(
                 spendingPatternService.getSpendingPattern(accountId, from, to)));
     }
@@ -100,8 +109,10 @@ public class ReportController {
             OffsetDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime to,
-            @RequestParam(defaultValue = "5") int limit
+            @RequestParam(defaultValue = "5") int limit,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
+        userAccessService.requireAccountAccess(userDetails, accountId);
         return ResponseEntity.ok(ApiResponse.ok(
                 statementService.getTopTransactions(accountId, from, to, limit)));
     }

@@ -35,13 +35,16 @@ public class ReconciliationService {
 
         log.info("[RECON] Source count={}, reporting count={}", sourceCount, reportingCount);
 
-        if (sourceCount != reportingCount) {
+        if (sourceCount > reportingCount) {
             long diff = sourceCount - reportingCount;
             log.warn("[RECON] MISMATCH detected. diff={} - triggering backfill", diff);
 
             // Backfill the mismatch automatically.
             long synced = backfillService.backfill(since);
             log.info("[RECON] Backfill completed, synced={}", synced);
+        } else if (reportingCount > sourceCount) {
+            long diff = reportingCount - sourceCount;
+            log.warn("[RECON] Reporting exceeds source by {} records. Manual investigation required", diff);
         } else {
             log.info("[RECON] No mismatch detected");
         }

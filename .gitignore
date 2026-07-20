@@ -14,3 +14,5 @@ reporting_postgres_data/
 .codex/
 AGENTS.md
 .agents/
+skills-lock.json
+.aiassistant/

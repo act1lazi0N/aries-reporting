@@ -1,4 +1,12 @@
 spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: optional:file:.env[.properties]
+
+---
+
+spring:
   application:
     name: aries-reporting
 
