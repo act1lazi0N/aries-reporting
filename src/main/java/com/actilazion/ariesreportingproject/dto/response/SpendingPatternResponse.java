@@ -2,6 +2,7 @@ package com.actilazion.ariesreportingproject.dto.response;
 
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,7 +17,7 @@ public record SpendingPatternResponse(
     public record HourlySlot(
             int    hour,
             long   txCount,
-            double volume
+            BigDecimal volume
     ) {
     }
 }

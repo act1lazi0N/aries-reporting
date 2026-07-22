@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -18,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class AdminReportServiceTest {
@@ -51,5 +53,31 @@ class AdminReportServiceTest {
 
         verify(valueOperations).get(expectedKey);
         verify(valueOperations).set(eq(expectedKey), any(), eq(Duration.ofMinutes(10)));
+    }
+
+    @Test
+    @DisplayName("getOverview: keeps money volume as BigDecimal")
+    void getOverview_keepsVolumeAsBigDecimal() {
+        OffsetDateTime from = OffsetDateTime.parse("2026-07-01T00:00:00Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-07-02T00:00:00Z");
+        String expectedKey = "admin:overview:" + from.toInstant() + ":" + to.toInstant();
+        AdminReportService service = new AdminReportService(
+                reportingTransactionRepository, redisTemplate, appProperties);
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(expectedKey)).thenReturn(null);
+        when(reportingTransactionRepository.findDailyVolumeByPeriod(from, to))
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{"2026-07-01", 2L, new BigDecimal("100.10")},
+                        new Object[]{"2026-07-02", 3L, new BigDecimal("200.20")}));
+        when(reportingTransactionRepository.countByStatusAndPeriod(from, to))
+                .thenReturn(List.<Object[]>of(new Object[]{"COMPLETED", 5L}));
+        when(appProperties.getCacheTtlMinutes()).thenReturn(10);
+
+        var result = service.getOverview(from, to);
+
+        assertThat(result.totalVolume()).isEqualByComparingTo("300.30");
+        assertThat(result.dailyVolumes().getFirst().volume())
+                .isEqualByComparingTo("100.10");
     }
 }
