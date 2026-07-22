@@ -36,7 +36,7 @@ public class AdminReportService {
             OffsetDateTime from,
             OffsetDateTime to
     ) {
-        String cacheKey = CACHE_PREFIX + from.toLocalDate() + ":" + to.toLocalDate();
+        String cacheKey = CACHE_PREFIX + from.toInstant() + ":" + to.toInstant();
 
         // Check cache
         Object cached = redisTemplate.opsForValue().get(cacheKey);

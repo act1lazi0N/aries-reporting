@@ -23,6 +23,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class ExportJobProcessor {
+    private static final int MAX_EXPORT_ROWS = 10_000;
+
     private final ReportJobRepository reportJobRepository;
     private final StatementService statementService;
     private final ExcelExportService excelExportService;
@@ -45,7 +47,7 @@ public class ExportJobProcessor {
             YearMonth to = YearMonth.parse(job.getParams().get("to").toString());
 
             AccountStatementResponse statement = statementService.getStatement(
-                    accountId, from, to, PageRequest.of(0, Integer.MAX_VALUE));
+                    accountId, from, to, PageRequest.of(0, MAX_EXPORT_ROWS));
 
             Path exportDir = Paths.get(appProperties.getExportDir());
             Files.createDirectories(exportDir);

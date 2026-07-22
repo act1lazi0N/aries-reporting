@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,6 +34,11 @@ import java.util.UUID;
 @Tag(name = "Reports", description = "Financial reporting endpoints")
 @SecurityRequirement(name = "bearerAuth")
 public class ReportController {
+    private static final int MIN_YEAR = 2020;
+    private static final int MIN_LIMIT = 1;
+    private static final int MAX_TOP_TRANSACTIONS_LIMIT = 100;
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final StatementService statementService;
     private final AdminReportService adminReportService;
     private final SpendingPatternService spendingPatternService;
@@ -49,10 +55,11 @@ public class ReportController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         userAccessService.requireAccountAccess(userDetails, accountId);
+        validatePageable(pageable);
         AccountStatementResponse res = statementService.getStatement(
                 accountId,
-                YearMonth.parse(from),
-                YearMonth.parse(to),
+                parseYearMonth(from, "from"),
+                parseYearMonth(to, "to"),
                 pageable
         );
         return ResponseEntity.ok(ApiResponse.ok(res));
@@ -68,6 +75,7 @@ public class ReportController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         userAccessService.requireAccountAccess(userDetails, accountId);
+        validateYearMonth(year, month);
         return ResponseEntity.ok(ApiResponse.ok(statementService.getMonthlySummary(accountId, year, month)));
     }
 
@@ -83,6 +91,7 @@ public class ReportController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         userAccessService.requireAccountAccess(userDetails, accountId);
+        validateTimeRange(from, to);
         return ResponseEntity.ok(ApiResponse.ok(
                 spendingPatternService.getSpendingPattern(accountId, from, to)));
     }
@@ -97,6 +106,7 @@ public class ReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime to
     ) {
+        validateTimeRange(from, to);
         return ResponseEntity.ok(ApiResponse.ok(adminReportService.getOverview(from, to)));
     }
 
@@ -113,7 +123,48 @@ public class ReportController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         userAccessService.requireAccountAccess(userDetails, accountId);
+        validateTimeRange(from, to);
+        validateLimit(limit);
         return ResponseEntity.ok(ApiResponse.ok(
                 statementService.getTopTransactions(accountId, from, to, limit)));
+    }
+
+    private YearMonth parseYearMonth(String value, String fieldName) {
+        try {
+            return YearMonth.parse(value);
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException(fieldName + " must be in format yyyy-MM");
+        }
+    }
+
+    private void validateYearMonth(int year, int month) {
+        if (year < MIN_YEAR) {
+            throw new IllegalArgumentException("year must be greater than or equal to " + MIN_YEAR);
+        }
+        if (month < 1 || month > 12) {
+            throw new IllegalArgumentException("month must be between 1 and 12");
+        }
+    }
+
+    private void validateTimeRange(OffsetDateTime from, OffsetDateTime to) {
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from must be before or equal to to");
+        }
+    }
+
+    private void validateLimit(int limit) {
+        if (limit < MIN_LIMIT || limit > MAX_TOP_TRANSACTIONS_LIMIT) {
+            throw new IllegalArgumentException(
+                    "limit must be between " + MIN_LIMIT + " and " + MAX_TOP_TRANSACTIONS_LIMIT);
+        }
+    }
+
+    private void validatePageable(Pageable pageable) {
+        if (pageable.getPageNumber() < 0) {
+            throw new IllegalArgumentException("page must be greater than or equal to 0");
+        }
+        if (pageable.getPageSize() < 1 || pageable.getPageSize() > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
+        }
     }
 }

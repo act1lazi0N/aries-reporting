@@ -5,9 +5,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -38,10 +40,30 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(403, ex.getMessage(), null));
     }
 
+    @ExceptionHandler({
+            IllegalArgumentException.class,
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse(400, badRequestMessage(ex), null));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(500, "An unexpected error occurred.", null));
+    }
+
+    private String badRequestMessage(Exception ex) {
+        if (ex instanceof MethodArgumentTypeMismatchException mismatch) {
+            return "Invalid value for parameter: " + mismatch.getName();
+        }
+        if (ex instanceof MissingServletRequestParameterException missing) {
+            return "Missing required parameter: " + missing.getParameterName();
+        }
+        return ex.getMessage();
     }
 
     public record ErrorResponse(

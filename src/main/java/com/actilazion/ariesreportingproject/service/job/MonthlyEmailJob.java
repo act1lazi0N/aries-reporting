@@ -33,6 +33,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MonthlyEmailJob {
+    private static final int MAX_EMAIL_STATEMENT_ROWS = 500;
+
     private final StatementService statementService;
     private final EmailService emailService;
     private final EmailLogRepository emailLogRepository;
@@ -104,7 +106,7 @@ public class MonthlyEmailJob {
         UUID accountId = accounts.get(0).getId();
         AccountStatementResponse statement = statementService.getStatement(
                 accountId, lastMonth, lastMonth,
-                PageRequest.of(0, Integer.MAX_VALUE));
+                PageRequest.of(0, MAX_EMAIL_STATEMENT_ROWS));
 
         // Skip email if no transactions
         if (statement.txCount() == 0
