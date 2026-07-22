@@ -61,6 +61,10 @@ spring:
 # JWT - test secret, do not use outside CI
 jwt:
   secret: dGVzdFNlY3JldEtleUZvckp3dFRlc3RpbmdQdXJwb3Nlc09ubHk=
+  issuer: aries-transaction
+  audience: aries-transaction-api
+  token-type: access
+  clock-skew-seconds: 30
 
 # App
 app:
