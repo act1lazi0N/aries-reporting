@@ -16,3 +16,4 @@ AGENTS.md
 .agents/
 skills-lock.json
 .aiassistant/
+/qodana.yaml
