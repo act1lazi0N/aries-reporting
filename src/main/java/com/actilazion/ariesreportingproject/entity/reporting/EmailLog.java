@@ -4,6 +4,8 @@ import com.actilazion.ariesreportingproject.enums.EmailStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -29,7 +31,8 @@ public class EmailLog {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "billing_month", nullable = false, length = 7)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "billing_month", nullable = false, length = 7, columnDefinition = "char(7)")
     private String billingMonth;
 
     @Column(name = "idempotency_key", nullable = false, length = 100)
