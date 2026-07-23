@@ -1,10 +1,18 @@
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.quartz.autoconfigure.QuartzAutoConfiguration
+
   # H2 in-memory - no real PostgreSQL instance required
   # Dual datasource uses 2 separate H2 databases
   # TestDataSourceConfig.java wires 2 beans instead of DataSourceConfig.java
   datasource:
+    url: jdbc:h2:mem:reporting_repo;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;NON_KEYWORDS=MONTH,YEAR;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
     reporting:
-      url: jdbc:h2:mem:reporting_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+      url: jdbc:h2:mem:reporting_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;NON_KEYWORDS=MONTH,YEAR
       username: sa
       password:
       driver-class-name: org.h2.Driver
@@ -12,7 +20,7 @@ spring:
         pool-name: ReportingTestPool
 
     transaction:
-      url: jdbc:h2:mem:transaction_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+      url: jdbc:h2:mem:transaction_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;NON_KEYWORDS=MONTH,YEAR
       username: sa
       password:
       driver-class-name: org.h2.Driver
@@ -53,6 +61,10 @@ spring:
 # JWT - test secret, do not use outside CI
 jwt:
   secret: dGVzdFNlY3JldEtleUZvckp3dFRlc3RpbmdQdXJwb3Nlc09ubHk=
+  issuer: aries-transaction
+  audience: aries-transaction-api
+  token-type: access
+  clock-skew-seconds: 30
 
 # App
 app:
@@ -66,5 +78,7 @@ app:
 logging:
   level:
     com.actilazion: WARN
+    com.actilazion.ariesreportingproject.service.sync.ReportingSyncListener: ERROR
     org.springframework: WARN
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR
     org.hibernate: WARN

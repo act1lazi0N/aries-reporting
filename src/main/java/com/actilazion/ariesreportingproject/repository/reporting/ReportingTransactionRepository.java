@@ -64,6 +64,19 @@ public interface ReportingTransactionRepository extends JpaRepository<ReportingT
             @Param("to")        OffsetDateTime to
     );
 
+    // Counts all transactions related to an account in a period.
+    @Query("""
+        SELECT COUNT(t)
+        FROM ReportingTransaction t
+        WHERE (t.fromAccountId = :accountId OR t.toAccountId = :accountId)
+          AND t.createdAt BETWEEN :from AND :to
+        """)
+    long countByAccountAndPeriod(
+            @Param("accountId") UUID accountId,
+            @Param("from")      OffsetDateTime from,
+            @Param("to")        OffsetDateTime to
+    );
+
     // Retrieves the largest COMPLETED transactions for an account in a time period based on the Pageable limit.
     @Query("""
         SELECT t FROM ReportingTransaction t
@@ -133,6 +146,26 @@ public interface ReportingTransactionRepository extends JpaRepository<ReportingT
         WHERE t.createdAt BETWEEN :from AND :to
         """)
     List<UUID> findSyncedTxIdsByPeriod(
+            @Param("from") OffsetDateTime from,
+            @Param("to")   OffsetDateTime to
+    );
+
+    @Query("""
+        SELECT DISTINCT t.fromAccountId
+        FROM ReportingTransaction t
+        WHERE t.createdAt BETWEEN :from AND :to
+        """)
+    List<UUID> findDistinctFromAccountIdsByPeriod(
+            @Param("from") OffsetDateTime from,
+            @Param("to")   OffsetDateTime to
+    );
+
+    @Query("""
+        SELECT DISTINCT t.toAccountId
+        FROM ReportingTransaction t
+        WHERE t.createdAt BETWEEN :from AND :to
+        """)
+    List<UUID> findDistinctToAccountIdsByPeriod(
             @Param("from") OffsetDateTime from,
             @Param("to")   OffsetDateTime to
     );

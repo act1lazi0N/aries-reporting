@@ -16,7 +16,9 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -40,8 +42,7 @@ public class SnapshotService {
         OffsetDateTime dayStart = yesterday.atStartOfDay().atOffset(ZoneOffset.UTC);
         OffsetDateTime dayEnd = yesterday.atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
 
-        // Fetch account IDs that have transactions on the previous day
-        List<UUID> accountIds = reportingTransactionRepository.findSyncedTxIdsByPeriod(dayStart, dayEnd).stream().distinct().toList();
+        Set<UUID> accountIds = accountIdsForPeriod(dayStart, dayEnd);
 
         int created = 0;
         for (UUID accountId : accountIds) {
@@ -51,12 +52,13 @@ public class SnapshotService {
 
             BigDecimal debit = reportingTransactionRepository.sumDebitByAccountAndPeriod(accountId, dayStart, dayEnd);
             BigDecimal credit = reportingTransactionRepository.sumCreditByAccountAndPeriod(accountId, dayStart, dayEnd);
+            long txCount = reportingTransactionRepository.countByAccountAndPeriod(accountId, dayStart, dayEnd);
 
             // Opening balance is equivalent to closing balance on the previous day
             BigDecimal opening = dailySnapshotRepository.findByAccountIdAndSnapshotDate(accountId, yesterday.minusDays(1)).map(DailySnapshot::getClosingBalance).orElse(BigDecimal.ZERO);
             BigDecimal closing = opening.add(credit).subtract(debit);
 
-            dailySnapshotRepository.save(DailySnapshot.builder().accountId(accountId).snapshotDate(yesterday).openingBalance(opening).closingBalance(closing).totalDebit(debit).totalCredit(credit).txCount(0).build());
+            dailySnapshotRepository.save(DailySnapshot.builder().accountId(accountId).snapshotDate(yesterday).openingBalance(opening).closingBalance(closing).totalDebit(debit).totalCredit(credit).txCount(Math.toIntExact(txCount)).build());
             created++;
         }
         log.info("[SNAPSHOT] Daily snapshot done. date={} accounts={}", yesterday, created);
@@ -77,13 +79,21 @@ public class SnapshotService {
         OffsetDateTime monthEnd   = lastMonth.atEndOfMonth()
                 .atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
 
-        List<UUID> accountIds = monthlySnapshotRepository.findAccountsWithoutSnapshotForMonth(monthStart, (short) lastMonth.getYear(), (short) lastMonth.getMonthValue());
+        Set<UUID> accountIds = accountIdsForPeriod(monthStart, monthEnd);
 
         int finalised = 0;
         for (UUID accountId : accountIds) {
+            if (monthlySnapshotRepository.existsByAccountIdAndYearAndMonth(
+                    accountId,
+                    (short) lastMonth.getYear(),
+                    (short) lastMonth.getMonthValue())) {
+                continue;
+            }
             BigDecimal debit  = reportingTransactionRepository.sumDebitByAccountAndPeriod(
                     accountId, monthStart, monthEnd);
             BigDecimal credit = reportingTransactionRepository.sumCreditByAccountAndPeriod(
+                    accountId, monthStart, monthEnd);
+            long txCount = reportingTransactionRepository.countByAccountAndPeriod(
                     accountId, monthStart, monthEnd);
 
             // Opening is equivalent to closing balance of the previous month.
@@ -106,11 +116,19 @@ public class SnapshotService {
                     .closingBalance(closing)
                     .totalDebit(debit)
                     .totalCredit(credit)
+                    .txCount(Math.toIntExact(txCount))
                     .isFinalised(true)
                     .build());
             finalised++;
         }
         log.info("[SNAPSHOT] Monthly snapshot done. month={} accounts={}",
                 lastMonth, finalised);
+    }
+
+    private Set<UUID> accountIdsForPeriod(OffsetDateTime from, OffsetDateTime to) {
+        Set<UUID> accountIds = new LinkedHashSet<>();
+        accountIds.addAll(reportingTransactionRepository.findDistinctFromAccountIdsByPeriod(from, to));
+        accountIds.addAll(reportingTransactionRepository.findDistinctToAccountIdsByPeriod(from, to));
+        return accountIds;
     }
 }

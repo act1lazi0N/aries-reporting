@@ -4,15 +4,16 @@ services:
     container_name: aries_reporting_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: aries_reporting_db
-      POSTGRES_USER: actilazion
-      POSTGRES_PASSWORD: Densetsuno911*
+      # Dev defaults keep compose runnable; override all DB values from .env in shared/prod environments.
+      POSTGRES_DB: ${REPORTING_POSTGRES_DB:-aries_reporting_db}
+      POSTGRES_USER: ${REPORTING_POSTGRES_USER:-reporting_user}
+      POSTGRES_PASSWORD: ${REPORTING_POSTGRES_PASSWORD:-reporting_password}
     ports:
       - "5433:5432"
     volumes:
       - reporting_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U reporting_user -d aries_reporting_db" ]
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,13 +45,14 @@ services:
     ports:
       - "8081:8081"
     environment:
-      SPRING_DATASOURCE_REPORTING_URL: jdbc:postgresql://postgres-reporting:5432/aries_reporting_db
-      SPRING_DATASOURCE_REPORTING_USERNAME: reporting_user
-      SPRING_DATASOURCE_REPORTING_PASSWORD: Densetsuno911*
+      # These values mirror postgres-reporting above; keep them aligned through .env overrides.
+      SPRING_DATASOURCE_REPORTING_URL: jdbc:postgresql://postgres-reporting:5432/${REPORTING_POSTGRES_DB:-aries_reporting_db}
+      SPRING_DATASOURCE_REPORTING_USERNAME: ${REPORTING_POSTGRES_USER:-reporting_user}
+      SPRING_DATASOURCE_REPORTING_PASSWORD: ${REPORTING_POSTGRES_PASSWORD:-reporting_password}
 
       SPRING_DATASOURCE_TRANSACTION_URL: jdbc:postgresql://host.docker.internal:5432/aries_transaction_db
-      SPRING_DATASOURCE_TRANSACTION_USERNAME: transfer_user
-      SPRING_DATASOURCE_TRANSACTION_PASSWORD: Densetsuno911*
+      SPRING_DATASOURCE_TRANSACTION_USERNAME: ${TRANSACTION_DB_USERNAME:-transfer_user}
+      SPRING_DATASOURCE_TRANSACTION_PASSWORD: ${TRANSACTION_DB_PASSWORD:-transfer_password}
 
       SPRING_DATA_REDIS_HOST: redis-reporting
       SPRING_DATA_REDIS_PORT: 6379

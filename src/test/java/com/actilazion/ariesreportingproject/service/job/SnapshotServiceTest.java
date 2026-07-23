@@ -1,6 +1,7 @@
 package com.actilazion.ariesreportingproject.service.job;
 
 import com.actilazion.ariesreportingproject.entity.reporting.DailySnapshot;
+import com.actilazion.ariesreportingproject.entity.reporting.MonthlySnapshot;
 import com.actilazion.ariesreportingproject.repository.reporting.DailySnapshotRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.MonthlySnapshotRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
@@ -14,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -42,8 +44,10 @@ class SnapshotServiceTest {
         LocalDate yesterday = LocalDate.now().minusDays(1);
 
         // Account had transactions yesterday
-        when(txRepo.findSyncedTxIdsByPeriod(any(), any()))
-                .thenReturn(List.of(UUID.randomUUID(), UUID.randomUUID()));
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
+                .thenReturn(List.of(accountId));
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
 
         when(dailyRepo.existsByAccountIdAndSnapshotDate(any(), eq(yesterday)))
                 .thenReturn(false);
@@ -52,6 +56,8 @@ class SnapshotServiceTest {
                 .thenReturn(new BigDecimal("3000000"));
         when(txRepo.sumCreditByAccountAndPeriod(any(), any(), any()))
                 .thenReturn(new BigDecimal("5000000"));
+        when(txRepo.countByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(4L);
 
         // Opening = 10,000,000 from the day before yesterday
         when(dailyRepo.findByAccountIdAndSnapshotDate(any(), eq(yesterday.minusDays(1))))
@@ -71,6 +77,41 @@ class SnapshotServiceTest {
         assertThat(saved.getOpeningBalance()).isEqualByComparingTo("10000000");
         assertThat(saved.getTotalDebit()).isEqualByComparingTo("3000000");
         assertThat(saved.getTotalCredit()).isEqualByComparingTo("5000000");
+        assertThat(saved.getTxCount()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("runMonthlySnapshot: stores the actual transaction count")
+    void runMonthlySnapshot_storesActualTransactionCount() {
+        YearMonth lastMonth = YearMonth.now().minusMonths(1);
+
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
+                .thenReturn(List.of(accountId));
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(monthlyRepo.existsByAccountIdAndYearAndMonth(
+                eq(accountId),
+                eq((short) lastMonth.getYear()),
+                eq((short) lastMonth.getMonthValue())))
+                .thenReturn(false);
+        when(txRepo.sumDebitByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(new BigDecimal("3000000"));
+        when(txRepo.sumCreditByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(new BigDecimal("5000000"));
+        when(txRepo.countByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(8L);
+        when(monthlyRepo.findByAccountIdAndYearAndMonth(any(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        snapshotService.runMonthlySnapshot();
+
+        ArgumentCaptor<MonthlySnapshot> captor =
+                ArgumentCaptor.forClass(MonthlySnapshot.class);
+        verify(monthlyRepo).save(captor.capture());
+
+        MonthlySnapshot saved = captor.getValue();
+        assertThat(saved.getTxCount()).isEqualTo(8);
+        assertThat(saved.getClosingBalance()).isEqualByComparingTo("2000000");
     }
 
     @Test
@@ -78,8 +119,10 @@ class SnapshotServiceTest {
     void runDailySnapshot_skipsExistingSnapshot() {
         LocalDate yesterday = LocalDate.now().minusDays(1);
 
-        when(txRepo.findSyncedTxIdsByPeriod(any(), any()))
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
                 .thenReturn(List.of(accountId));
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
 
         // Snapshot already exists
         when(dailyRepo.existsByAccountIdAndSnapshotDate(accountId, yesterday))
@@ -94,7 +137,9 @@ class SnapshotServiceTest {
     @Test
     @DisplayName("runDailySnapshot: skips when there are no transactions")
     void runDailySnapshot_noTransactions_skips() {
-        when(txRepo.findSyncedTxIdsByPeriod(any(), any()))
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
                 .thenReturn(Collections.emptyList());
 
         snapshotService.runDailySnapshot();

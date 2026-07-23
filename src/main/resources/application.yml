@@ -1,4 +1,12 @@
 spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: optional:file:.env[.properties]
+
+---
+
+spring:
   application:
     name: aries-reporting
 
@@ -69,6 +77,10 @@ spring:
 # JWT
 jwt:
   secret: ${JWT_SECRET}
+  issuer: ${JWT_ISSUER:aries-transaction}
+  audience: ${JWT_AUDIENCE:aries-transaction-api}
+  token-type: ${JWT_TOKEN_TYPE:access}
+  clock-skew-seconds: ${JWT_CLOCK_SKEW_SECONDS:30}
 
 # App
 app:

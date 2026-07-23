@@ -9,6 +9,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -36,7 +37,7 @@ public class AdminReportService {
             OffsetDateTime from,
             OffsetDateTime to
     ) {
-        String cacheKey = CACHE_PREFIX + from.toLocalDate() + ":" + to.toLocalDate();
+        String cacheKey = CACHE_PREFIX + from.toInstant() + ":" + to.toInstant();
 
         // Check cache
         Object cached = redisTemplate.opsForValue().get(cacheKey);
@@ -68,15 +69,15 @@ public class AdminReportService {
     {
         List<AdminOverviewResponse.DailyVolume> volumes = new ArrayList<>();
         long totalTransactions = 0;
-        double totalVolume = 0;
+        BigDecimal totalVolume = BigDecimal.ZERO;
 
         for (Object[] row : dailyVolume) {
             String day = row[0].toString();
             long count = ((Number) row[1]).longValue();
-            double volume =  ((Number) row[2]).doubleValue();
+            BigDecimal volume = toBigDecimal(row[2]);
             volumes.add(new AdminOverviewResponse.DailyVolume(day, count, volume));
             totalTransactions += count;
-            totalVolume += volume;
+            totalVolume = totalVolume.add(volume);
         }
 
         long completed = 0, failed = 0, pending = 0;
@@ -103,5 +104,15 @@ public class AdminReportService {
                 .failureRate(Math.round(failRate * 100.0) / 100.0)
                 .dailyVolumes(volumes)
                 .build();
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value instanceof BigDecimal amount) {
+            return amount;
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        return new BigDecimal(value.toString());
     }
 }

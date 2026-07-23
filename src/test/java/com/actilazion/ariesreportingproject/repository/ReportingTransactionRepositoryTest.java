@@ -1,6 +1,7 @@
 package com.actilazion.ariesreportingproject.repository;
 
 
+import com.actilazion.ariesreportingproject.support.ApplicationTestPropertiesInitializer;
 import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,9 +10,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -23,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
+@ContextConfiguration(initializers = ApplicationTestPropertiesInitializer.class)
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ReportingTransactionRepositoryTest {
     @Autowired
     TestEntityManager em;
@@ -124,6 +129,18 @@ class ReportingTransactionRepositoryTest {
                 OffsetDateTime.now().minusDays(1).minusHours(1));
         // B -> A (a day ago) + A -> C (3 hours ago) + FAILED (an hour ago) = 3
         assertThat(count).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("countByAccountAndPeriod: counts both directions and all statuses")
+    void countByAccountAndPeriod_countsBothDirectionsAndAllStatuses() {
+        OffsetDateTime from = OffsetDateTime.now().minusDays(7);
+        OffsetDateTime to = OffsetDateTime.now().plusDays(1);
+
+        long count = repo.countByAccountAndPeriod(accountA, from, to);
+
+        // A sent 2 COMPLETED + 1 FAILED + received 1 COMPLETED = 4
+        assertThat(count).isEqualTo(4);
     }
 
     // Helper

@@ -14,7 +14,7 @@ import java.util.UUID;
         name = "monthly_snapshots",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_monthly_account_month",
-                columnNames = {"account_id", "year", "month"}
+                columnNames = {"account_id", "\"year\"", "\"month\""}
         )
 )
 @Getter @Setter
@@ -28,10 +28,10 @@ public class MonthlySnapshot {
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
 
-    @Column(nullable = false)
+    @Column(name = "\"year\"", nullable = false)
     private Short year;
 
-    @Column(nullable = false)
+    @Column(name = "\"month\"", nullable = false)
     private Short month;
 
     @Column(name = "opening_balance", nullable = false, precision = 18, scale = 2)

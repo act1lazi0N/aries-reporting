@@ -33,6 +33,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MonthlyEmailJob {
+    private static final int MAX_EMAIL_STATEMENT_ROWS = 500;
+
     private final StatementService statementService;
     private final EmailService emailService;
     private final EmailLogRepository emailLogRepository;
@@ -58,8 +60,9 @@ public class MonthlyEmailJob {
         for (UUID userId : addUserIds) {
             String idempotencyKey = EmailLog.buildIdempotencyKey(userId, billingMonth);
 
-            // Idempotency check - skip if sent
-            if (emailLogRepository.existsByIdempotencyKey(idempotencyKey)) {
+            EmailLog existingLog = emailLogRepository.findByIdempotencyKey(idempotencyKey)
+                    .orElse(null);
+            if (existingLog != null && existingLog.getStatus() == EmailStatus.SENT) {
                 skipped++;
                 continue;
             }
@@ -67,10 +70,10 @@ public class MonthlyEmailJob {
             try {
                 boolean success = sendToUser(userId, billingMonth, lastMonth);
                 if (success) {
-                    saveEmailLog(userId, billingMonth, idempotencyKey, EmailStatus.SENT, null);
+                    saveEmailLog(existingLog, userId, billingMonth, idempotencyKey, EmailStatus.SENT, null);
                     sent++;
                 } else {
-                    saveEmailLog(userId, billingMonth, idempotencyKey, EmailStatus.SKIPPED, "No transactions this month");
+                    saveEmailLog(existingLog, userId, billingMonth, idempotencyKey, EmailStatus.SKIPPED, "No transactions this month");
                     skipped++;
                 }
 
@@ -79,7 +82,7 @@ public class MonthlyEmailJob {
             } catch (Exception e) {
                 log.error("[EMAIL-JOB] Failed for userId={}: {}",
                         userId, e.getMessage());
-                saveEmailLog(userId, billingMonth,
+                saveEmailLog(existingLog, userId, billingMonth,
                         idempotencyKey, EmailStatus.FAILED, e.getMessage());
                 failed++;
             }
@@ -94,10 +97,7 @@ public class MonthlyEmailJob {
      */
     private boolean sendToUser(UUID userId, String billingMonth, YearMonth lastMonth) {
         // Get accounts from user
-        var accounts = accountViewRepository.findAll()
-                .stream()
-                .filter(a -> userId.equals(a.getUserId()))
-                .toList();
+        var accounts = accountViewRepository.findAllByUserId(userId);
 
         if (accounts.isEmpty()) return false;
 
@@ -106,7 +106,7 @@ public class MonthlyEmailJob {
         UUID accountId = accounts.get(0).getId();
         AccountStatementResponse statement = statementService.getStatement(
                 accountId, lastMonth, lastMonth,
-                PageRequest.of(0, Integer.MAX_VALUE));
+                PageRequest.of(0, MAX_EMAIL_STATEMENT_ROWS));
 
         // Skip email if no transactions
         if (statement.txCount() == 0
@@ -138,14 +138,14 @@ public class MonthlyEmailJob {
         return true;
     }
 
-    @Transactional
-    protected void saveEmailLog(UUID userId, String billingMonth, String idempotencyKey, EmailStatus status, String errorReason) {
-        emailLogRepository.save(EmailLog.builder()
+    private void saveEmailLog(EmailLog existingLog, UUID userId, String billingMonth, String idempotencyKey, EmailStatus status, String errorReason) {
+        EmailLog log = existingLog != null ? existingLog : EmailLog.builder()
                 .userId(userId)
                 .billingMonth(billingMonth)
                 .idempotencyKey(idempotencyKey)
-                .status(status)
-                .errorMessage(errorReason)
-                .build());
+                .build();
+        log.setStatus(status);
+        log.setErrorMessage(errorReason);
+        emailLogRepository.save(log);
     }
 }

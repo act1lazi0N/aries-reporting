@@ -1,6 +1,5 @@
 package com.actilazion.ariesreportingproject.service.export;
 
-import com.actilazion.ariesreportingproject.config.AppProperties;
 import com.actilazion.ariesreportingproject.dto.request.ExportRequest;
 import com.actilazion.ariesreportingproject.dto.response.ReportJobResponse;
 import com.actilazion.ariesreportingproject.entity.reporting.ReportJob;
@@ -9,7 +8,6 @@ import com.actilazion.ariesreportingproject.enums.ReportJobStatus;
 import com.actilazion.ariesreportingproject.enums.ReportJobType;
 import com.actilazion.ariesreportingproject.exception.ReportJobNotReadyException;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportJobRepository;
-import com.actilazion.ariesreportingproject.service.reporting.StatementService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,13 +30,7 @@ class ExportOrchestratorTest {
     @Mock
     ReportJobRepository reportJobRepo;
     @Mock
-    StatementService statementService;
-    @Mock
-    ExcelExportService excelExportService;
-    @Mock
-    PdfExportService pdfExportService;
-    @Mock
-    AppProperties appProperties;
+    ExportJobProcessor exportJobProcessor;
     @InjectMocks
     ExportOrchestrator orchestrator;
 
@@ -57,30 +49,33 @@ class ExportOrchestratorTest {
         assertThat(response.status()).isEqualTo(ReportJobStatus.PENDING);
         assertThat(response.downloadUrl()).isNull(); // not READY yet
         verify(reportJobRepo).save(any());
+        verify(exportJobProcessor).processJob(savedJob.getId());
     }
 
     @Test
     @DisplayName("getFileForDownload: throws when job is not READY")
     void getFileForDownload_throwsWhenNotReady() {
         UUID jobId = UUID.randomUUID();
-        ReportJob pendingJob = ReportJob.builder().id(jobId).status(ReportJobStatus.PROCESSING).build();
+        UUID requestedBy = UUID.randomUUID();
+        ReportJob pendingJob = ReportJob.builder().id(jobId).requestedBy(requestedBy).status(ReportJobStatus.PROCESSING).build();
 
         when(reportJobRepo.findById(jobId)).thenReturn(Optional.of(pendingJob));
 
-        assertThatThrownBy(() -> orchestrator.getFileForDownload(jobId)).isInstanceOf(ReportJobNotReadyException.class);
+        assertThatThrownBy(() -> orchestrator.getFileForDownload(jobId, requestedBy, false)).isInstanceOf(ReportJobNotReadyException.class);
     }
 
     @Test
     @DisplayName("getFileForDownload: throws when job has EXPIRED")
     void getFileForDownload_throwsWhenExpired() {
         UUID jobId = UUID.randomUUID();
-        ReportJob expiredJob = ReportJob.builder().id(jobId).status(ReportJobStatus.READY).filePath("/tmp/report.xlsx").expiresAt(OffsetDateTime.now().minusHours(1)) // already expired
+        UUID requestedBy = UUID.randomUUID();
+        ReportJob expiredJob = ReportJob.builder().id(jobId).requestedBy(requestedBy).status(ReportJobStatus.READY).filePath("/tmp/report.xlsx").expiresAt(OffsetDateTime.now().minusHours(1)) // already expired
                 .build();
 
         when(reportJobRepo.findById(jobId)).thenReturn(Optional.of(expiredJob));
         when(reportJobRepo.save(any())).thenReturn(expiredJob);
 
-        assertThatThrownBy(() -> orchestrator.getFileForDownload(jobId)).isInstanceOf(Exception.class);
+        assertThatThrownBy(() -> orchestrator.getFileForDownload(jobId, requestedBy, false)).isInstanceOf(Exception.class);
 
         // Status must be updated to EXPIRED
         verify(reportJobRepo).save(argThat(job -> job.getStatus() == ReportJobStatus.EXPIRED));

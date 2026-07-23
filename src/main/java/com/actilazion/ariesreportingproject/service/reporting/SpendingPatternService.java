@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,14 +26,17 @@ public class SpendingPatternService {
 
         // Init 24 slots with 0
         long[] counts = new long[24];
-        double[] volumes = new double[24];
+        BigDecimal[] volumes = new BigDecimal[24];
+        for (int h = 0; h < 24; h++) {
+            volumes[h] = BigDecimal.ZERO;
+        }
 
         for (Object[] row : hourlyRaw) {
             int hour = ((Number) row[0]).intValue();
             long count = ((Number) row[1]).longValue();
-            double volumne = ((Number) row[2]).doubleValue();
+            BigDecimal volume = toBigDecimal(row[2]);
             counts[hour] = count;
-            volumes[hour] = volumne;
+            volumes[hour] = volume;
         }
 
         for (int h = 0; h < 24; h++) {
@@ -41,9 +45,9 @@ public class SpendingPatternService {
 
         // Peak hour - hour has the highest volume
         int peakHour = 0;
-        double maxVol = 0;
+        BigDecimal maxVol = BigDecimal.ZERO;
         for (int h = 0; h < 24; h++) {
-            if (volumes[h] > maxVol) {
+            if (volumes[h].compareTo(maxVol) > 0) {
                 maxVol   = volumes[h];
                 peakHour = h;
             }
@@ -56,5 +60,15 @@ public class SpendingPatternService {
                 .hourlySpending(hourlySlots)
                 .peakHour(peakHour)
                 .build();
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value instanceof BigDecimal amount) {
+            return amount;
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        return new BigDecimal(value.toString());
     }
 }

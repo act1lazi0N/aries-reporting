@@ -48,8 +48,11 @@ public class StatementService {
             YearMonth from,
             YearMonth to,
             Pageable pageable) {
+        validatePeriod(from, to);
+
         YearMonth currentMonth = YearMonth.now();
-        boolean includesCurrentMonth = !to.isBefore(currentMonth);
+        boolean includesCurrentMonth = !from.isAfter(currentMonth)
+                && !to.isBefore(currentMonth);
 
         BigDecimal totalDebit = BigDecimal.ZERO;
         BigDecimal totalCredit = BigDecimal.ZERO;
@@ -83,14 +86,18 @@ public class StatementService {
         if (includesCurrentMonth) {
             OffsetDateTime currentMonthStart = currentMonth.atDay(1)
                     .atStartOfDay().atOffset(ZoneOffset.UTC);
+            OffsetDateTime now = OffsetDateTime.now();
 
             BigDecimal currentDebit = transactionRepository.sumDebitByAccountAndPeriod(
-                    accountId, currentMonthStart, OffsetDateTime.now());
+                    accountId, currentMonthStart, now);
             BigDecimal currentCredit = transactionRepository.sumCreditByAccountAndPeriod(
-                    accountId, currentMonthStart, OffsetDateTime.now());
+                    accountId, currentMonthStart, now);
+            long currentCount = transactionRepository.countByAccountAndPeriod(
+                    accountId, currentMonthStart, now);
 
             totalDebit = totalDebit.add(currentDebit);
             totalCredit = totalCredit.add(currentCredit);
+            transactionCount += Math.toIntExact(currentCount);
         }
 
         // Paginated transactions are always queried on the fly.
@@ -145,6 +152,8 @@ public class StatementService {
                 accountId, start, end);
         BigDecimal credit = transactionRepository.sumCreditByAccountAndPeriod(
                 accountId, start, end);
+        long txCount = transactionRepository.countByAccountAndPeriod(
+                accountId, start, end);
 
         return TransactionSummaryResponse.builder()
                 .accountId(accountId)
@@ -152,7 +161,7 @@ public class StatementService {
                 .month(month)
                 .totalDebit(debit)
                 .totalCredit(credit)
-                .txCount(0) // On-the-fly txCount can be added with a separate query.
+                .txCount(Math.toIntExact(txCount))
                 .isFromSnapshot(false)
                 .build();
     }
@@ -196,6 +205,12 @@ public class StatementService {
                 .totalDebit(BigDecimal.ZERO).totalCredit(BigDecimal.ZERO)
                 .txCount(0).isFromSnapshot(true)
                 .build();
+    }
+
+    private void validatePeriod(YearMonth from, YearMonth to) {
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from must be before or equal to to");
+        }
     }
 
 }
