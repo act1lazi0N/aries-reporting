@@ -78,5 +78,7 @@ app:
 logging:
   level:
     com.actilazion: WARN
+    com.actilazion.ariesreportingproject.service.sync.ReportingSyncListener: ERROR
     org.springframework: WARN
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR
     org.hibernate: WARN

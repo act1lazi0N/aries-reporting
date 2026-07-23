@@ -6,10 +6,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -19,8 +18,7 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
-    private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
+    private final AuthenticationManager authenticationManager;
     private final BearerTokenResolver bearerTokenResolver;
 
     @Override
@@ -39,47 +37,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        final String jwt = bearerToken.token();
-        final String userEmail;
-
-        try {
-            userEmail = jwtService.extractUsername(jwt);
-        } catch (Exception e) {
-            reject(response);
-            return;
-        }
-        if (userEmail == null || userEmail.isBlank()) {
-            reject(response);
-            return;
-        }
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails;
             try {
-                userDetails = userDetailsService.loadUserByUsername(userEmail);
-                if (!isAccountUsable(userDetails) || !jwtService.isTokenValid(jwt, userDetails)) {
-                    reject(response);
-                    return;
-                }
-            } catch (Exception e) {
+                RawJwtAuthenticationToken rawToken = new RawJwtAuthenticationToken(bearerToken.token());
+                rawToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                var authentication = authenticationManager.authenticate(rawToken);
+                var context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(authentication);
+                SecurityContextHolder.setContext(context);
+            } catch (AuthenticationException e) {
                 reject(response);
                 return;
             }
-
-            var authToken = new UsernamePasswordAuthenticationToken(
-                    userDetails, null, userDetails.getAuthorities());
-            authToken.setDetails(
-                    new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authToken);
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private boolean isAccountUsable(UserDetails userDetails) {
-        return userDetails.isEnabled()
-                && userDetails.isAccountNonExpired()
-                && userDetails.isAccountNonLocked()
-                && userDetails.isCredentialsNonExpired();
     }
 
     private void reject(HttpServletResponse response) throws IOException {

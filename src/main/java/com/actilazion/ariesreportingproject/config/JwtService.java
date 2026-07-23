@@ -1,6 +1,7 @@
 package com.actilazion.ariesreportingproject.config;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -10,7 +11,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
-import java.util.Date;
 import java.util.function.Function;
 import javax.crypto.SecretKey;
 
@@ -18,6 +18,7 @@ import javax.crypto.SecretKey;
 @RequiredArgsConstructor
 public class JwtService {
     private static final String TOKEN_TYPE_CLAIM = "typ";
+    private static final String EXPECTED_ALGORITHM = "HS256";
 
     private final JwtProperties jwtProperties;
 
@@ -38,20 +39,19 @@ public class JwtService {
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
-    }
-
-    private boolean isTokenExpired(String token) {
-        return extractClaim(token, Claims::getExpiration).before(new Date());
+        return username.equals(userDetails.getUsername());
     }
 
     private <T> T extractClaim(String token, Function<Claims, T> resolver) {
-        Claims claims = Jwts.parser()
+        Jws<Claims> jws = Jwts.parser()
                 .clockSkewSeconds(jwtProperties.getClockSkewSeconds())
                 .verifyWith(getSigningKey())
                 .build()
-                .parseSignedClaims(token)
-                .getPayload();
+                .parseSignedClaims(token);
+        if (!EXPECTED_ALGORITHM.equals(jws.getHeader().getAlgorithm())) {
+            throw new IllegalArgumentException("JWT algorithm is invalid");
+        }
+        Claims claims = jws.getPayload();
         validateClaims(claims);
         return resolver.apply(claims);
     }

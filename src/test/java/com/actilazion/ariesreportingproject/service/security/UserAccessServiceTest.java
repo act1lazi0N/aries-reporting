@@ -42,6 +42,21 @@ class UserAccessServiceTest {
     }
 
     @Test
+    @DisplayName("requireAccountAccess: auditor is platform-wide read-only report role")
+    void requireAccountAccess_auditorSkipsOwnershipLookup() {
+        UserAccessService service = new UserAccessService(userViewRepository, accountViewRepository);
+        var auditor = User.withUsername("auditor@aries.local")
+                .password("n/a")
+                .roles("AUDITOR")
+                .build();
+        UUID accountId = UUID.randomUUID();
+
+        service.requireAccountAccess(auditor, accountId);
+
+        verifyNoInteractions(accountViewRepository, userViewRepository);
+    }
+
+    @Test
     @DisplayName("requireAccountAccess: user must own account")
     void requireAccountAccess_userMustOwnAccount() {
         UserAccessService service = new UserAccessService(userViewRepository, accountViewRepository);

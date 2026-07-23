@@ -29,6 +29,7 @@ public class UserAccessService {
 
     @Transactional(transactionManager = "transactionTransactionManager", readOnly = true)
     public void requireAccountAccess(UserDetails userDetails, UUID accountId) {
+        // Auditors are platform-wide read-only report users; route security blocks export/admin actions.
         if (hasRole(userDetails, "ADMIN") || hasRole(userDetails, "AUDITOR")) {
             return;
         }

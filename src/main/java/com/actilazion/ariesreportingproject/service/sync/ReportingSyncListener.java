@@ -33,8 +33,9 @@ public class ReportingSyncListener {
         try {
             reportingEventConsumer.consumeTransferCompleted(mapper.fromLegacyEvent(event));
         } catch (Exception ex) {
-            log.error("[SYNC] Failed to consume event for transactionId={} - {}",
-                    event.transactionId(), ex.getMessage(), ex);
+            log.warn("[SYNC] Failed to consume event for transactionId={} - {}",
+                    event.transactionId(), ex.getMessage());
+            log.debug("[SYNC] Legacy event consumption failure", ex);
         }
     }
 }
