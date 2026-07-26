@@ -89,6 +89,10 @@ app:
     export-ttl-hours: ${EXPORT_TTL_HOURS:24}
     mail-from: ${MAIL_FROM}
     cache-ttl-minutes: ${CACHE_TTL_MINUTES:10}
+    events:
+      rabbit:
+        enabled: ${REPORTING_RABBIT_ENABLED:false}
+        transfer-completed-queue: ${REPORTING_TRANSFER_COMPLETED_QUEUE:transaction.transfer.completed.reporting}
 
 # Server
 server:

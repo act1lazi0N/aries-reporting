@@ -136,4 +136,29 @@ class ExportOrchestratorTest {
 
         verify(reportJobRepo).save(argThat(job -> job.getStatus() == ReportJobStatus.EXPIRED));
     }
+
+    @Test
+    @DisplayName("recoverStaleJobs: requeues pending and processing jobs")
+    void recoverStaleJobs_requeuesRecoverableJobs() {
+        UUID pendingJobId = UUID.randomUUID();
+        UUID processingJobId = UUID.randomUUID();
+        ReportJob pendingJob = ReportJob.builder()
+                .id(pendingJobId)
+                .status(ReportJobStatus.PENDING)
+                .createdAt(OffsetDateTime.now().minusMinutes(10))
+                .build();
+        ReportJob processingJob = ReportJob.builder()
+                .id(processingJobId)
+                .status(ReportJobStatus.PROCESSING)
+                .createdAt(OffsetDateTime.now().minusMinutes(10))
+                .build();
+
+        when(reportJobRepo.findAllByStatusInAndCreatedAtBefore(anyList(), any()))
+                .thenReturn(java.util.List.of(pendingJob, processingJob));
+
+        orchestrator.recoverStaleJobs();
+
+        verify(exportJobProcessor).processJob(pendingJobId);
+        verify(exportJobProcessor).processJob(processingJobId);
+    }
 }

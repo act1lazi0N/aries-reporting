@@ -66,6 +66,8 @@ services:
       MAIL_FROM: ${MAIL_FROM:-noreply@aries.local}
 
       EXPORT_DIR: /app/exports
+      REPORTING_RABBIT_ENABLED: ${REPORTING_RABBIT_ENABLED:-false}
+      REPORTING_TRANSFER_COMPLETED_QUEUE: ${REPORTING_TRANSFER_COMPLETED_QUEUE:-transaction.transfer.completed.reporting}
       SPRING_PROFILES_ACTIVE: docker
 
     volumes:

@@ -58,9 +58,6 @@ class SnapshotServiceTest {
         when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
                 .thenReturn(Collections.emptyList());
 
-        when(dailyRepo.existsByAccountIdAndSnapshotDate(any(), eq(yesterday)))
-                .thenReturn(false);
-
         when(txRepo.sumDebitByAccountAndPeriod(any(), any(), any()))
                 .thenReturn(new BigDecimal("3000000"));
         when(txRepo.sumCreditByAccountAndPeriod(any(), any(), any()))
@@ -69,10 +66,12 @@ class SnapshotServiceTest {
                 .thenReturn(4L);
 
         // Opening = 10,000,000 from the day before yesterday
-        when(dailyRepo.findByAccountIdAndSnapshotDate(any(), eq(yesterday.minusDays(1))))
+        when(dailyRepo.findFirstByAccountIdAndSnapshotDateBeforeOrderBySnapshotDateDesc(any(), eq(yesterday)))
                 .thenReturn(Optional.of(DailySnapshot.builder()
                         .closingBalance(new BigDecimal("10000000"))
                         .build()));
+        when(dailyRepo.findByAccountIdAndSnapshotDate(any(), eq(yesterday)))
+                .thenReturn(Optional.empty());
 
         snapshotService.runDailySnapshot();
 
@@ -98,17 +97,14 @@ class SnapshotServiceTest {
                 .thenReturn(List.of(accountId));
         when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
                 .thenReturn(Collections.emptyList());
-        when(monthlyRepo.existsByAccountIdAndYearAndMonth(
-                eq(accountId),
-                eq((short) lastMonth.getYear()),
-                eq((short) lastMonth.getMonthValue())))
-                .thenReturn(false);
         when(txRepo.sumDebitByAccountAndPeriod(any(), any(), any()))
                 .thenReturn(new BigDecimal("3000000"));
         when(txRepo.sumCreditByAccountAndPeriod(any(), any(), any()))
                 .thenReturn(new BigDecimal("5000000"));
         when(txRepo.countByAccountAndPeriod(any(), any(), any()))
                 .thenReturn(8L);
+        when(monthlyRepo.findLatestBeforeMonth(any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
         when(monthlyRepo.findByAccountIdAndYearAndMonth(any(), any(), any()))
                 .thenReturn(Optional.empty());
 
@@ -124,23 +120,75 @@ class SnapshotServiceTest {
     }
 
     @Test
-    @DisplayName("runDailySnapshot: idempotency skips account with an existing snapshot")
-    void runDailySnapshot_skipsExistingSnapshot() {
+    @DisplayName("runDailySnapshot: idempotency updates an existing snapshot")
+    void runDailySnapshot_updatesExistingSnapshot() {
         LocalDate yesterday = LocalDate.of(2026, 6, 30);
+        DailySnapshot existing = DailySnapshot.builder()
+                .id(UUID.randomUUID())
+                .accountId(accountId)
+                .snapshotDate(yesterday)
+                .openingBalance(BigDecimal.ZERO)
+                .closingBalance(BigDecimal.ZERO)
+                .totalDebit(BigDecimal.ZERO)
+                .totalCredit(BigDecimal.ZERO)
+                .txCount(0)
+                .build();
 
         when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
                 .thenReturn(List.of(accountId));
         when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
                 .thenReturn(Collections.emptyList());
 
-        // Snapshot already exists
-        when(dailyRepo.existsByAccountIdAndSnapshotDate(accountId, yesterday))
-                .thenReturn(true);
+        when(txRepo.sumDebitByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(new BigDecimal("1000000"));
+        when(txRepo.sumCreditByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(new BigDecimal("2500000"));
+        when(txRepo.countByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(3L);
+        when(dailyRepo.findFirstByAccountIdAndSnapshotDateBeforeOrderBySnapshotDateDesc(accountId, yesterday))
+                .thenReturn(Optional.of(DailySnapshot.builder()
+                        .closingBalance(new BigDecimal("7000000"))
+                        .build()));
+        when(dailyRepo.findByAccountIdAndSnapshotDate(accountId, yesterday))
+                .thenReturn(Optional.of(existing));
 
         snapshotService.runDailySnapshot();
 
-        // Does not call save()
-        verify(dailyRepo, never()).save(any());
+        verify(dailyRepo).save(existing);
+        assertThat(existing.getOpeningBalance()).isEqualByComparingTo("7000000");
+        assertThat(existing.getClosingBalance()).isEqualByComparingTo("8500000");
+        assertThat(existing.getTxCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("runDailySnapshot: carries latest prior balance across inactive days")
+    void runDailySnapshot_carriesLatestPriorBalanceAcrossGap() {
+        LocalDate yesterday = LocalDate.of(2026, 6, 30);
+
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
+                .thenReturn(List.of(accountId));
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(txRepo.sumDebitByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(txRepo.sumCreditByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(new BigDecimal("500000"));
+        when(txRepo.countByAccountAndPeriod(any(), any(), any()))
+                .thenReturn(1L);
+        when(dailyRepo.findFirstByAccountIdAndSnapshotDateBeforeOrderBySnapshotDateDesc(accountId, yesterday))
+                .thenReturn(Optional.of(DailySnapshot.builder()
+                        .snapshotDate(LocalDate.of(2026, 6, 20))
+                        .closingBalance(new BigDecimal("9000000"))
+                        .build()));
+        when(dailyRepo.findByAccountIdAndSnapshotDate(accountId, yesterday))
+                .thenReturn(Optional.empty());
+
+        snapshotService.runDailySnapshot();
+
+        ArgumentCaptor<DailySnapshot> captor = ArgumentCaptor.forClass(DailySnapshot.class);
+        verify(dailyRepo).save(captor.capture());
+        assertThat(captor.getValue().getOpeningBalance()).isEqualByComparingTo("9000000");
+        assertThat(captor.getValue().getClosingBalance()).isEqualByComparingTo("9500000");
     }
 
     @Test

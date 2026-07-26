@@ -24,6 +24,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ExportJobProcessor {
     private static final int MAX_EXPORT_ROWS = 10_000;
+    private static final String EXPORT_TOO_LARGE_MESSAGE =
+            "Export exceeds 10000 rows; narrow the requested period";
 
     private final ReportJobRepository reportJobRepository;
     private final StatementService statementService;
@@ -48,6 +50,10 @@ public class ExportJobProcessor {
 
             AccountStatementResponse statement = statementService.getStatement(
                     accountId, from, to, PageRequest.of(0, MAX_EXPORT_ROWS));
+            if (statement.transactions() != null
+                    && statement.transactions().getTotalElements() > MAX_EXPORT_ROWS) {
+                throw new IllegalStateException(EXPORT_TOO_LARGE_MESSAGE);
+            }
 
             Path exportDir = Paths.get(appProperties.getExportDir());
             Files.createDirectories(exportDir);

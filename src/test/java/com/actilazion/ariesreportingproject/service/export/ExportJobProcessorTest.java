@@ -10,16 +10,15 @@ import com.actilazion.ariesreportingproject.repository.reporting.ReportJobReposi
 import com.actilazion.ariesreportingproject.service.reporting.StatementService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
-import java.nio.file.Path;
 import java.time.YearMonth;
 import java.util.Map;
 import java.util.Optional;
@@ -28,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,12 +43,10 @@ class ExportJobProcessorTest {
     PdfExportService pdfExportService;
     @Mock
     AppProperties appProperties;
-    @TempDir
-    Path exportDir;
 
     @Test
-    @DisplayName("processJob: uses bounded page size for statement export")
-    void processJob_usesBoundedStatementPageSize() throws Exception {
+    @DisplayName("processJob: fails oversized exports instead of silently truncating")
+    void processJob_failsOversizedExport() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         ReportJob job = ReportJob.builder()
@@ -63,8 +61,6 @@ class ExportJobProcessorTest {
                 .build();
 
         when(reportJobRepository.findById(jobId)).thenReturn(Optional.of(job));
-        when(appProperties.getExportDir()).thenReturn(exportDir.toString());
-        when(appProperties.getExportTtlHours()).thenReturn(24);
         when(statementService.getStatement(any(), any(), any(), any()))
                 .thenReturn(AccountStatementResponse.builder()
                         .accountId(accountId)
@@ -74,7 +70,10 @@ class ExportJobProcessorTest {
                         .totalCredit(BigDecimal.ZERO)
                         .netFlow(BigDecimal.ZERO)
                         .txCount(0)
-                        .transactions(new PageImpl<>(java.util.List.of()))
+                        .transactions(new PageImpl<>(
+                                java.util.List.of(),
+                                PageRequest.of(0, 10_000),
+                                10_001))
                         .build());
 
         ExportJobProcessor processor = new ExportJobProcessor(
@@ -93,6 +92,9 @@ class ExportJobProcessorTest {
                 eq(YearMonth.parse("2026-01")),
                 pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(10_000);
-        verify(excelExportService).generateStatement(any(), any());
+        assertThat(job.getStatus()).isEqualTo(ReportJobStatus.FAILED);
+        assertThat(job.getErrorMessage())
+                .isEqualTo("Export exceeds 10000 rows; narrow the requested period");
+        verify(excelExportService, never()).generateStatement(any(), any());
     }
 }

@@ -30,6 +30,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class ExportOrchestrator {
+    private static final int STALE_JOB_MINUTES = 5;
+
     private final ReportJobRepository reportJobRepository;
     private final ExportJobProcessor exportJobProcessor;
 
@@ -107,6 +109,19 @@ public class ExportOrchestrator {
 
         if (!expired.isEmpty()) {
             log.info("[EXPORT] Cleaned up {} expired jobs", expired.size());
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${app.reporting.export-recovery-delay-ms:300000}")
+    public void recoverStaleJobs() {
+        OffsetDateTime threshold = OffsetDateTime.now().minusMinutes(STALE_JOB_MINUTES);
+        List<ReportJob> staleJobs = reportJobRepository.findAllByStatusInAndCreatedAtBefore(
+                List.of(ReportJobStatus.PENDING, ReportJobStatus.PROCESSING),
+                threshold);
+
+        for (ReportJob job : staleJobs) {
+            log.info("[EXPORT] Recovering stale jobId={} status={}", job.getId(), job.getStatus());
+            exportJobProcessor.processJob(job.getId());
         }
     }
 

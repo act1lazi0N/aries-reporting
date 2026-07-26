@@ -1,6 +1,7 @@
 package com.actilazion.ariesreportingproject.repository.reporting;
 
 import com.actilazion.ariesreportingproject.entity.reporting.MonthlySnapshot;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +17,19 @@ public interface MonthlySnapshotRepository extends JpaRepository<MonthlySnapshot
     // Finds a monthly snapshot by account, year, and month.
     Optional<MonthlySnapshot> findByAccountIdAndYearAndMonth(
             UUID accountId, Short year, Short month);
+
+    // Finds the latest snapshot before a target reporting month for opening balance carry-forward.
+    @Query("""
+        SELECT s FROM MonthlySnapshot s
+        WHERE s.accountId = :accountId
+          AND (s.year < :year OR (s.year = :year AND s.month < :month))
+        ORDER BY s.year DESC, s.month DESC
+        """)
+    List<MonthlySnapshot> findLatestBeforeMonth(
+            @Param("accountId") UUID accountId,
+            @Param("year") Short year,
+            @Param("month") Short month,
+            Pageable pageable);
 
     // Checks whether a monthly snapshot already exists for an account, year, and month.
     boolean existsByAccountIdAndYearAndMonth(
