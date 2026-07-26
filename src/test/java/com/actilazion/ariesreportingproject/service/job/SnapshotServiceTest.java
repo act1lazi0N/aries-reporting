@@ -5,17 +5,21 @@ import com.actilazion.ariesreportingproject.entity.reporting.MonthlySnapshot;
 import com.actilazion.ariesreportingproject.repository.reporting.DailySnapshotRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.MonthlySnapshotRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -33,15 +37,20 @@ class SnapshotServiceTest {
     DailySnapshotRepository dailyRepo;
     @Mock
     MonthlySnapshotRepository monthlyRepo;
-    @InjectMocks
     SnapshotService snapshotService;
 
     private final UUID accountId = UUID.randomUUID();
 
+    @BeforeEach
+    void setUp() {
+        Clock clock = Clock.fixed(Instant.parse("2026-06-30T17:30:00Z"), ZoneOffset.UTC);
+        snapshotService = new SnapshotService(dailyRepo, txRepo, monthlyRepo, clock);
+    }
+
     @Test
     @DisplayName("runDailySnapshot: creates snapshot with the correct balance")
     void runDailySnapshot_createsCorrectSnapshot() {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        LocalDate yesterday = LocalDate.of(2026, 6, 30);
 
         // Account had transactions yesterday
         when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
@@ -83,7 +92,7 @@ class SnapshotServiceTest {
     @Test
     @DisplayName("runMonthlySnapshot: stores the actual transaction count")
     void runMonthlySnapshot_storesActualTransactionCount() {
-        YearMonth lastMonth = YearMonth.now().minusMonths(1);
+        YearMonth lastMonth = YearMonth.of(2026, 6);
 
         when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
                 .thenReturn(List.of(accountId));
@@ -117,7 +126,7 @@ class SnapshotServiceTest {
     @Test
     @DisplayName("runDailySnapshot: idempotency skips account with an existing snapshot")
     void runDailySnapshot_skipsExistingSnapshot() {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        LocalDate yesterday = LocalDate.of(2026, 6, 30);
 
         when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
                 .thenReturn(List.of(accountId));
@@ -132,6 +141,40 @@ class SnapshotServiceTest {
 
         // Does not call save()
         verify(dailyRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("runDailySnapshot: uses Ho Chi Minh business day when JVM clock is UTC")
+    void runDailySnapshot_usesHoChiMinhBusinessDay() {
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+
+        snapshotService.runDailySnapshot();
+
+        ArgumentCaptor<OffsetDateTime> from = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<OffsetDateTime> to = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(txRepo).findDistinctFromAccountIdsByPeriod(from.capture(), to.capture());
+        assertThat(from.getValue()).isEqualTo(OffsetDateTime.parse("2026-06-30T00:00:00+07:00"));
+        assertThat(to.getValue()).isEqualTo(OffsetDateTime.parse("2026-06-30T23:59:59.999999999+07:00"));
+    }
+
+    @Test
+    @DisplayName("runMonthlySnapshot: uses Ho Chi Minh business month when JVM clock is UTC")
+    void runMonthlySnapshot_usesHoChiMinhBusinessMonth() {
+        when(txRepo.findDistinctFromAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(txRepo.findDistinctToAccountIdsByPeriod(any(), any()))
+                .thenReturn(Collections.emptyList());
+
+        snapshotService.runMonthlySnapshot();
+
+        ArgumentCaptor<OffsetDateTime> from = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<OffsetDateTime> to = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(txRepo).findDistinctFromAccountIdsByPeriod(from.capture(), to.capture());
+        assertThat(from.getValue()).isEqualTo(OffsetDateTime.parse("2026-06-01T00:00:00+07:00"));
+        assertThat(to.getValue()).isEqualTo(OffsetDateTime.parse("2026-06-30T23:59:59.999999999+07:00"));
     }
 
     @Test

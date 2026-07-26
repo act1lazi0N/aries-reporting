@@ -17,8 +17,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -34,6 +36,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MonthlyEmailJob {
     private static final int MAX_EMAIL_STATEMENT_ROWS = 500;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final StatementService statementService;
     private final EmailService emailService;
@@ -41,10 +44,11 @@ public class MonthlyEmailJob {
     private final ReportingTransactionRepository reportingTransactionRepository;
     private final UserViewRepository userViewRepository;
     private final AccountViewRepository accountViewRepository;
+    private final Clock clock;
 
     @Scheduled(cron = "0 0 8 1 * *", zone = "Asia/Ho_Chi_Minh")
     public void sendMonthlyStatements() {
-        YearMonth lastMonth = YearMonth.now().minusMonths(1);
+        YearMonth lastMonth = YearMonth.now(clock.withZone(BUSINESS_ZONE)).minusMonths(1);
         String billingMonth = lastMonth.toString();
 
         log.info("[EMAIL-JOB] Starting monthly email job for billing month: {}", billingMonth);

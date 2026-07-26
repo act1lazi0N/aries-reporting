@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -47,7 +49,7 @@ public class ExportOrchestrator {
                 .build();
 
         job = reportJobRepository.save(job);
-        exportJobProcessor.processJob(job.getId());
+        processJobAfterCommit(job.getId());
 
         log.info("[EXPORT] Job created jobId={} format={}", job.getId(), request.format());
         return ReportJobResponse.from(job, baseUrl);
@@ -112,5 +114,18 @@ public class ExportOrchestrator {
         if (!isAdmin && !job.getRequestedBy().equals(requestedBy)) {
             throw new AccessDeniedException("Access denied to export job");
         }
+    }
+
+    private void processJobAfterCommit(UUID jobId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            exportJobProcessor.processJob(jobId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                exportJobProcessor.processJob(jobId);
+            }
+        });
     }
 }

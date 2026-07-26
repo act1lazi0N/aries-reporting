@@ -12,18 +12,24 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.MockedStatic;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mockStatic;
 
 @ExtendWith(MockitoExtension.class)
 class ExportOrchestratorTest {
@@ -50,6 +56,44 @@ class ExportOrchestratorTest {
         assertThat(response.downloadUrl()).isNull(); // not READY yet
         verify(reportJobRepo).save(any());
         verify(exportJobProcessor).processJob(savedJob.getId());
+    }
+
+    @Test
+    @DisplayName("createJob: starts async processing only after transaction commit")
+    void createJob_defersProcessingUntilAfterCommit() {
+        UUID requestedBy = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        ExportRequest request = new ExportRequest(
+                UUID.randomUUID(),
+                ReportJobType.ACCOUNT_STATEMENT,
+                ReportFormat.EXCEL,
+                "2025-01",
+                "2025-03");
+        ReportJob savedJob = ReportJob.builder()
+                .id(jobId)
+                .status(ReportJobStatus.PENDING)
+                .jobType(request.jobType())
+                .format(request.format())
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(reportJobRepo.save(any())).thenReturn(savedJob);
+
+        AtomicReference<TransactionSynchronization> synchronization = new AtomicReference<>();
+        try (MockedStatic<TransactionSynchronizationManager> tx = mockStatic(TransactionSynchronizationManager.class)) {
+            tx.when(TransactionSynchronizationManager::isSynchronizationActive).thenReturn(true);
+            tx.when(() -> TransactionSynchronizationManager.registerSynchronization(any(TransactionSynchronization.class)))
+                    .thenAnswer(invocation -> {
+                        synchronization.set(invocation.getArgument(0));
+                        return null;
+                    });
+
+            orchestrator.createJob(request, requestedBy, "http://localhost:8081");
+
+            verify(exportJobProcessor, never()).processJob(any());
+            assertThat(synchronization.get()).isNotNull();
+            synchronization.get().afterCommit();
+            verify(exportJobProcessor).processJob(jobId);
+        }
     }
 
     @Test

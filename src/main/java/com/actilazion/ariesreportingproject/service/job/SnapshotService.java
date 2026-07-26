@@ -12,10 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,9 +26,12 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class SnapshotService {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
     private final DailySnapshotRepository dailySnapshotRepository;
     private final ReportingTransactionRepository reportingTransactionRepository;
     private final MonthlySnapshotRepository monthlySnapshotRepository;
+    private final Clock clock;
 
     /**
      * Daily snapshot job - runs at 00:05 every day.
@@ -36,11 +40,11 @@ public class SnapshotService {
     @Scheduled(cron = "0 5 0 * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional(transactionManager = "reportingTransactionManager")
     public void runDailySnapshot() {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        LocalDate yesterday = LocalDate.now(clock.withZone(BUSINESS_ZONE)).minusDays(1);
         log.info("[SNAPSHOT] Running daily snapshot for {}", yesterday);
 
-        OffsetDateTime dayStart = yesterday.atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime dayEnd = yesterday.atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
+        OffsetDateTime dayStart = startOfDay(yesterday);
+        OffsetDateTime dayEnd = startOfDay(yesterday.plusDays(1)).minusNanos(1);
 
         Set<UUID> accountIds = accountIdsForPeriod(dayStart, dayEnd);
 
@@ -71,13 +75,11 @@ public class SnapshotService {
     @Scheduled(cron = "0 30 0 1 * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional(transactionManager = "reportingTransactionManager")
     public void runMonthlySnapshot() {
-        YearMonth lastMonth = YearMonth.now().minusMonths(1);
+        YearMonth lastMonth = YearMonth.now(clock.withZone(BUSINESS_ZONE)).minusMonths(1);
         log.info("[SNAPSHOT] Running monthly snapshot for {}", lastMonth);
 
-        OffsetDateTime monthStart = lastMonth.atDay(1)
-                .atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime monthEnd   = lastMonth.atEndOfMonth()
-                .atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
+        OffsetDateTime monthStart = startOfDay(lastMonth.atDay(1));
+        OffsetDateTime monthEnd = startOfDay(lastMonth.plusMonths(1).atDay(1)).minusNanos(1);
 
         Set<UUID> accountIds = accountIdsForPeriod(monthStart, monthEnd);
 
@@ -130,5 +132,9 @@ public class SnapshotService {
         accountIds.addAll(reportingTransactionRepository.findDistinctFromAccountIdsByPeriod(from, to));
         accountIds.addAll(reportingTransactionRepository.findDistinctToAccountIdsByPeriod(from, to));
         return accountIds;
+    }
+
+    private OffsetDateTime startOfDay(LocalDate date) {
+        return date.atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
     }
 }
