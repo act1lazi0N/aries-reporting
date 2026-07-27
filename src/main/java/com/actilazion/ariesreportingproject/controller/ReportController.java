@@ -1,7 +1,6 @@
 package com.actilazion.ariesreportingproject.controller;
 
 import com.actilazion.ariesreportingproject.dto.response.*;
-import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.service.reporting.AdminReportService;
 import com.actilazion.ariesreportingproject.service.reporting.SpendingPatternService;
 import com.actilazion.ariesreportingproject.service.reporting.StatementService;
@@ -113,7 +112,7 @@ public class ReportController {
     // F5 - Top Transactions
     @GetMapping("/top-transactions")
     @Operation(summary = "Top N largest transactions in a period")
-    public ResponseEntity<ApiResponse<List<ReportingTransaction>>> getTopTransactions(
+    public ResponseEntity<ApiResponse<List<TopTransactionResponse>>> getTopTransactions(
             @RequestParam UUID accountId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime from,
@@ -125,8 +124,12 @@ public class ReportController {
         userAccessService.requireAccountAccess(userDetails, accountId);
         validateTimeRange(from, to);
         validateLimit(limit);
-        return ResponseEntity.ok(ApiResponse.ok(
-                statementService.getTopTransactions(accountId, from, to, limit)));
+        List<TopTransactionResponse> topTransactions = statementService
+                .getTopTransactions(accountId, from, to, limit)
+                .stream()
+                .map(TopTransactionResponse::from)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok(topTransactions));
     }
 
     private YearMonth parseYearMonth(String value, String fieldName) {

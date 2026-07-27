@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ExportJobProcessorTest {
@@ -96,5 +97,86 @@ class ExportJobProcessorTest {
         assertThat(job.getErrorMessage())
                 .isEqualTo("Export exceeds 10000 rows; narrow the requested period");
         verify(excelExportService, never()).generateStatement(any(), any());
+    }
+
+    @Test
+    @DisplayName("processJob: rejects unsupported report job types without dispatching")
+    void processJob_rejectsUnsupportedJobType() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        ReportJob job = ReportJob.builder()
+                .id(jobId)
+                .jobType(ReportJobType.ADMIN_OVERVIEW)
+                .format(ReportFormat.PDF)
+                .status(ReportJobStatus.PENDING)
+                .params(Map.of())
+                .build();
+
+        when(reportJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        ExportJobProcessor processor = new ExportJobProcessor(
+                reportJobRepository,
+                statementService,
+                excelExportService,
+                pdfExportService,
+                appProperties);
+
+        processor.processJob(jobId);
+
+        assertThat(job.getStatus()).isEqualTo(ReportJobStatus.FAILED);
+        assertThat(job.getErrorMessage()).isEqualTo("Unsupported report job type");
+        verifyNoGeneratorDispatch();
+    }
+
+    @Test
+    @DisplayName("processJob: stores stable public message for unexpected generator errors")
+    void processJob_sanitizesUnexpectedErrors() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        ReportJob job = ReportJob.builder()
+                .id(jobId)
+                .jobType(ReportJobType.ACCOUNT_STATEMENT)
+                .format(ReportFormat.PDF)
+                .status(ReportJobStatus.PENDING)
+                .params(Map.of(
+                        "accountId", accountId.toString(),
+                        "from", "2026-01",
+                        "to", "2026-01"))
+                .build();
+
+        when(reportJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(statementService.getStatement(any(), any(), any(), any()))
+                .thenReturn(AccountStatementResponse.builder()
+                        .accountId(accountId)
+                        .periodFrom("2026-01")
+                        .periodTo("2026-01")
+                        .totalDebit(BigDecimal.ZERO)
+                        .totalCredit(BigDecimal.ZERO)
+                        .netFlow(BigDecimal.ZERO)
+                        .txCount(0)
+                        .transactions(new PageImpl<>(
+                                java.util.List.of(),
+                                PageRequest.of(0, 10_000),
+                                0))
+                        .build());
+        when(appProperties.getExportDir()).thenReturn("target/test-exports");
+        doThrow(new IllegalStateException("internal path C:\\secret\\report.pdf"))
+                .when(pdfExportService).generateStatement(any(), any());
+
+        ExportJobProcessor processor = new ExportJobProcessor(
+                reportJobRepository,
+                statementService,
+                excelExportService,
+                pdfExportService,
+                appProperties);
+
+        processor.processJob(jobId);
+
+        assertThat(job.getStatus()).isEqualTo(ReportJobStatus.FAILED);
+        assertThat(job.getErrorMessage()).isEqualTo("Export failed");
+    }
+
+    private void verifyNoGeneratorDispatch() throws Exception {
+        verify(excelExportService, never()).generateStatement(any(), any());
+        verify(pdfExportService, never()).generateStatement(any(), any());
     }
 }

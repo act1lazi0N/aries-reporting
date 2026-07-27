@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -37,11 +39,11 @@ public class EmailService {
                     "[Aries] Monthly Statement — " + billingMonth);
             helper.setText(html, true);
             mailSender.send(message);
-            log.info("[EMAIL] Sent monthly statement to={} month={}",
-                    recipientEmail, billingMonth);
+            log.info("[EMAIL] Sent monthly statement recipientRef={} month={}",
+                    recipientRef(recipientEmail), billingMonth);
         } catch (MessagingException e) {
-            log.error("[EMAIL] Failed to send monthly statement to={} month={}: {}",
-                    recipientEmail, billingMonth, e.getMessage(), e);
+            log.error("[EMAIL] Failed to send monthly statement recipientRef={} month={}: {}",
+                    recipientRef(recipientEmail), billingMonth, e.getMessage(), e);
             throw new RuntimeException("Email send failed", e);
         }
     }
@@ -60,9 +62,23 @@ public class EmailService {
         ctx.setVariable("totalCredit", statement.totalCredit());
         ctx.setVariable("netFlow", statement.netFlow());
         ctx.setVariable("topTransactions", topTransactions);
-        ctx.setVariable("dashboardUrl", "http://localhost:3000/dashboard");
-        ctx.setVariable("unsubscribeUrl", "http://localhost:3000/unsubscribe");
+        String publicBaseUrl = normalizeBaseUrl(appProperties.getPublicBaseUrl());
+        ctx.setVariable("dashboardUrl", publicBaseUrl + "/dashboard");
+        ctx.setVariable("unsubscribeUrl", publicBaseUrl + "/unsubscribe");
 
         return templateEngine.process("email/monthly-statement", ctx);
+    }
+
+    private String normalizeBaseUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return "http://localhost:3000";
+        }
+        return baseUrl.replaceAll("/+$", "");
+    }
+
+    private String recipientRef(String recipientEmail) {
+        return UUID.nameUUIDFromBytes(
+                        recipientEmail.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8))
+                .toString();
     }
 }

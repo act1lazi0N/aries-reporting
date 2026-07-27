@@ -1,6 +1,7 @@
 package com.actilazion.ariesreportingproject.config;
 
 import com.actilazion.ariesreportingproject.dto.response.TransactionSummaryResponse;
+import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.service.export.ExportOrchestrator;
 import com.actilazion.ariesreportingproject.service.reporting.AdminReportService;
 import com.actilazion.ariesreportingproject.service.reporting.SpendingPatternService;
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -33,14 +35,17 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -258,6 +263,67 @@ class SecurityFilterChainTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.accountId").value(accountId.toString()));
         verify(userAccessService).requireAccountAccess(any(), eq(accountId));
+    }
+
+    @Test
+    @DisplayName("top transactions API returns DTO response for authorized user")
+    void topTransactions_userToken_returnsDtoResponse() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        UUID txId = UUID.randomUUID();
+        UUID originalTxId = UUID.randomUUID();
+        OffsetDateTime from = OffsetDateTime.parse("2026-07-01T00:00:00Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-08-01T00:00:00Z");
+        when(userDetailsService.loadUserByUsername(USER_EMAIL))
+                .thenReturn(activeUser(USER_EMAIL, "USER"));
+        when(statementService.getTopTransactions(accountId, from, to, 5))
+                .thenReturn(List.of(ReportingTransaction.builder()
+                        .id(txId)
+                        .originalTxId(originalTxId)
+                        .fromAccountNumber("1001")
+                        .toAccountNumber("2002")
+                        .fromOwnerName("Sender")
+                        .toOwnerName("Receiver")
+                        .amount(new BigDecimal("999.00"))
+                        .currency("VND")
+                        .status("COMPLETED")
+                        .description("top")
+                        .createdAt(from.plusDays(1))
+                        .build()));
+
+        mockMvc.perform(get("/api/v1/reports/top-transactions")
+                        .param("accountId", accountId.toString())
+                        .param("from", from.toString())
+                        .param("to", to.toString())
+                        .param("limit", "5")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token(USER_EMAIL)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(txId.toString()))
+                .andExpect(jsonPath("$.data[0].originalTxId").value(originalTxId.toString()))
+                .andExpect(jsonPath("$.data[0].amount").value(999.00))
+                .andExpect(jsonPath("$.data[0].fromAccountId").doesNotExist())
+                .andExpect(jsonPath("$.data[0].syncedAt").doesNotExist());
+        verify(userAccessService).requireAccountAccess(any(), eq(accountId));
+        verify(statementService).getTopTransactions(accountId, from, to, 5);
+    }
+
+    @Test
+    @DisplayName("top transactions API denies cross-account access")
+    void topTransactions_crossAccount_returnsForbidden() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        OffsetDateTime from = OffsetDateTime.parse("2026-07-01T00:00:00Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-08-01T00:00:00Z");
+        when(userDetailsService.loadUserByUsername(USER_EMAIL))
+                .thenReturn(activeUser(USER_EMAIL, "USER"));
+        doThrow(new AccessDeniedException("Account access denied"))
+                .when(userAccessService).requireAccountAccess(any(), eq(accountId));
+
+        mockMvc.perform(get("/api/v1/reports/top-transactions")
+                        .param("accountId", accountId.toString())
+                        .param("from", from.toString())
+                        .param("to", to.toString())
+                        .param("limit", "5")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token(USER_EMAIL)))
+                .andExpect(status().isForbidden());
     }
 
     @Test

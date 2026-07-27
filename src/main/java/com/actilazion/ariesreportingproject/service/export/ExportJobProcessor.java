@@ -4,6 +4,7 @@ import com.actilazion.ariesreportingproject.config.AppProperties;
 import com.actilazion.ariesreportingproject.dto.response.AccountStatementResponse;
 import com.actilazion.ariesreportingproject.entity.reporting.ReportJob;
 import com.actilazion.ariesreportingproject.enums.ReportJobStatus;
+import com.actilazion.ariesreportingproject.enums.ReportJobType;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportJobRepository;
 import com.actilazion.ariesreportingproject.service.reporting.StatementService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,8 @@ public class ExportJobProcessor {
     private static final int MAX_EXPORT_ROWS = 10_000;
     private static final String EXPORT_TOO_LARGE_MESSAGE =
             "Export exceeds 10000 rows; narrow the requested period";
+    private static final String UNSUPPORTED_JOB_TYPE_MESSAGE = "Unsupported report job type";
+    private static final String EXPORT_FAILED_MESSAGE = "Export failed";
 
     private final ReportJobRepository reportJobRepository;
     private final StatementService statementService;
@@ -44,6 +47,10 @@ public class ExportJobProcessor {
         reportJobRepository.save(job);
 
         try {
+            if (job.getJobType() != ReportJobType.ACCOUNT_STATEMENT) {
+                throw new UnsupportedOperationException(UNSUPPORTED_JOB_TYPE_MESSAGE);
+            }
+
             UUID accountId = UUID.fromString(job.getParams().get("accountId").toString());
             YearMonth from = YearMonth.parse(job.getParams().get("from").toString());
             YearMonth to = YearMonth.parse(job.getParams().get("to").toString());
@@ -74,7 +81,7 @@ public class ExportJobProcessor {
             log.info("[EXPORT] Job completed jobId={} file={}", jobId, filename);
         } catch (Exception e) {
             job.setStatus(ReportJobStatus.FAILED);
-            job.setErrorMessage(e.getMessage());
+            job.setErrorMessage(publicErrorMessage(e));
             job.setCompletedAt(OffsetDateTime.now());
             log.error("[EXPORT] Job failed jobId={}: {}", jobId, e.getMessage(), e);
         }
@@ -88,5 +95,13 @@ public class ExportJobProcessor {
             case PDF -> "pdf";
         };
         return "report_" + job.getId() + "." + ext;
+    }
+
+    private String publicErrorMessage(Exception e) {
+        if (EXPORT_TOO_LARGE_MESSAGE.equals(e.getMessage())
+                || UNSUPPORTED_JOB_TYPE_MESSAGE.equals(e.getMessage())) {
+            return e.getMessage();
+        }
+        return EXPORT_FAILED_MESSAGE;
     }
 }

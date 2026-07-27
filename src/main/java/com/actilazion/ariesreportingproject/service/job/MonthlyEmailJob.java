@@ -4,7 +4,6 @@ import com.actilazion.ariesreportingproject.dto.response.AccountStatementRespons
 import com.actilazion.ariesreportingproject.entity.reporting.EmailLog;
 import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.enums.EmailStatus;
-import com.actilazion.ariesreportingproject.repository.reporting.EmailLogRepository;
 import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
 import com.actilazion.ariesreportingproject.repository.transaction.AccountViewRepository;
 import com.actilazion.ariesreportingproject.repository.transaction.UserViewRepository;
@@ -15,13 +14,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,7 +39,7 @@ public class MonthlyEmailJob {
 
     private final StatementService statementService;
     private final EmailService emailService;
-    private final EmailLogRepository emailLogRepository;
+    private final EmailDeliveryClaimService emailDeliveryClaimService;
     private final ReportingTransactionRepository reportingTransactionRepository;
     private final UserViewRepository userViewRepository;
     private final AccountViewRepository accountViewRepository;
@@ -64,9 +63,9 @@ public class MonthlyEmailJob {
         for (UUID userId : addUserIds) {
             String idempotencyKey = EmailLog.buildIdempotencyKey(userId, billingMonth);
 
-            EmailLog existingLog = emailLogRepository.findByIdempotencyKey(idempotencyKey)
+            EmailLog claim = emailDeliveryClaimService.claim(userId, billingMonth, idempotencyKey)
                     .orElse(null);
-            if (existingLog != null && existingLog.getStatus() == EmailStatus.SENT) {
+            if (claim == null) {
                 skipped++;
                 continue;
             }
@@ -74,10 +73,10 @@ public class MonthlyEmailJob {
             try {
                 boolean success = sendToUser(userId, billingMonth, lastMonth);
                 if (success) {
-                    saveEmailLog(existingLog, userId, billingMonth, idempotencyKey, EmailStatus.SENT, null);
+                    emailDeliveryClaimService.complete(claim.getId(), EmailStatus.SENT, null);
                     sent++;
                 } else {
-                    saveEmailLog(existingLog, userId, billingMonth, idempotencyKey, EmailStatus.SKIPPED, "No transactions this month");
+                    emailDeliveryClaimService.complete(claim.getId(), EmailStatus.SKIPPED, "No transactions this month");
                     skipped++;
                 }
 
@@ -86,8 +85,7 @@ public class MonthlyEmailJob {
             } catch (Exception e) {
                 log.error("[EMAIL-JOB] Failed for userId={}: {}",
                         userId, e.getMessage());
-                saveEmailLog(existingLog, userId, billingMonth,
-                        idempotencyKey, EmailStatus.FAILED, e.getMessage());
+                emailDeliveryClaimService.complete(claim.getId(), EmailStatus.FAILED, "Email send failed");
                 failed++;
             }
         }
@@ -105,12 +103,8 @@ public class MonthlyEmailJob {
 
         if (accounts.isEmpty()) return false;
 
-        // Use the first account to generate statement
-        // Production: possible to send an email summarizing multiple accounts
-        UUID accountId = accounts.get(0).getId();
-        AccountStatementResponse statement = statementService.getStatement(
-                accountId, lastMonth, lastMonth,
-                PageRequest.of(0, MAX_EMAIL_STATEMENT_ROWS));
+        AccountStatementResponse statement = buildConsolidatedStatement(
+                accounts.stream().map(a -> a.getId()).toList(), lastMonth);
 
         // Skip email if no transactions
         if (statement.txCount() == 0
@@ -120,14 +114,15 @@ public class MonthlyEmailJob {
         }
 
         // Get Top 5 transactions
-        OffsetDateTime monthStart = lastMonth.atDay(1)
-                .atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime monthEnd = lastMonth.atEndOfMonth()
-                .atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
+        OffsetDateTime monthStart = lastMonth.atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
+        OffsetDateTime monthEnd = lastMonth.plusMonths(1).atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
 
-        List<ReportingTransaction> topTx = reportingTransactionRepository.findTopByAccountAndPeriod(
-                accountId, monthStart, monthEnd, PageRequest.of(0, 5)
-        );
+        List<ReportingTransaction> topTx = accounts.stream()
+                .flatMap(account -> reportingTransactionRepository.findTopByAccountAndPeriod(
+                        account.getId(), monthStart, monthEnd, PageRequest.of(0, 5)).stream())
+                .sorted(Comparator.comparing(ReportingTransaction::getAmount).reversed())
+                .limit(5)
+                .toList();
 
         // Get email and full name
         var userOpt = userViewRepository.findById(userId);
@@ -142,14 +137,27 @@ public class MonthlyEmailJob {
         return true;
     }
 
-    private void saveEmailLog(EmailLog existingLog, UUID userId, String billingMonth, String idempotencyKey, EmailStatus status, String errorReason) {
-        EmailLog log = existingLog != null ? existingLog : EmailLog.builder()
-                .userId(userId)
-                .billingMonth(billingMonth)
-                .idempotencyKey(idempotencyKey)
+    private AccountStatementResponse buildConsolidatedStatement(List<UUID> accountIds, YearMonth month) {
+        BigDecimal totalDebit = BigDecimal.ZERO;
+        BigDecimal totalCredit = BigDecimal.ZERO;
+        int txCount = 0;
+
+        for (UUID accountId : accountIds) {
+            AccountStatementResponse accountStatement = statementService.getStatement(
+                    accountId, month, month, PageRequest.of(0, MAX_EMAIL_STATEMENT_ROWS));
+            totalDebit = totalDebit.add(accountStatement.totalDebit());
+            totalCredit = totalCredit.add(accountStatement.totalCredit());
+            txCount += accountStatement.txCount();
+        }
+
+        return AccountStatementResponse.builder()
+                .accountId(accountIds.getFirst())
+                .periodFrom(month.toString())
+                .periodTo(month.toString())
+                .totalDebit(totalDebit)
+                .totalCredit(totalCredit)
+                .netFlow(totalCredit.subtract(totalDebit))
+                .txCount(txCount)
                 .build();
-        log.setStatus(status);
-        log.setErrorMessage(errorReason);
-        emailLogRepository.save(log);
     }
 }

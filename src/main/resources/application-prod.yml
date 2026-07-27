@@ -46,3 +46,4 @@ management:
 app:
   reporting:
     cache-ttl-minutes: 15   # use a longer cache duration in prod
+    public-base-url: ${PUBLIC_BASE_URL}

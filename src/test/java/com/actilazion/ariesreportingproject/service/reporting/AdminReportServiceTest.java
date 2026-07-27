@@ -80,4 +80,30 @@ class AdminReportServiceTest {
         assertThat(result.dailyVolumes().getFirst().volume())
                 .isEqualByComparingTo("100.10");
     }
+
+    @Test
+    @DisplayName("getOverview: total transactions and failure rate use all statuses")
+    void getOverview_failureRateUsesAllStatusCounts() {
+        OffsetDateTime from = OffsetDateTime.parse("2026-07-01T00:00:00Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-07-02T00:00:00Z");
+        String expectedKey = "admin:overview:" + from.toInstant() + ":" + to.toInstant();
+        AdminReportService service = new AdminReportService(
+                reportingTransactionRepository, redisTemplate, appProperties);
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(expectedKey)).thenReturn(null);
+        when(reportingTransactionRepository.findDailyVolumeByPeriod(from, to))
+                .thenReturn(List.<Object[]>of(new Object[]{"2026-07-01", 8L, new BigDecimal("800.00")}));
+        when(reportingTransactionRepository.countByStatusAndPeriod(from, to))
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{"COMPLETED", 8L},
+                        new Object[]{"FAILED", 2L},
+                        new Object[]{"PENDING", 5L}));
+        when(appProperties.getCacheTtlMinutes()).thenReturn(10);
+
+        var result = service.getOverview(from, to);
+
+        assertThat(result.totalTransactions()).isEqualTo(15);
+        assertThat(result.failureRate()).isEqualTo(13.33);
+    }
 }

@@ -1,5 +1,6 @@
 package com.actilazion.ariesreportingproject.controller;
 
+import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.service.reporting.AdminReportService;
 import com.actilazion.ariesreportingproject.service.reporting.SpendingPatternService;
 import com.actilazion.ariesreportingproject.service.reporting.StatementService;
@@ -12,10 +13,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ReportControllerValidationTest {
@@ -58,6 +63,40 @@ class ReportControllerValidationTest {
                 UUID.randomUUID(), from, to, 101, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("limit must be between 1 and 100");
+    }
+
+    @Test
+    @DisplayName("getTopTransactions: returns DTOs instead of JPA entities")
+    void getTopTransactions_returnsDtos() {
+        UUID accountId = UUID.randomUUID();
+        UUID txId = UUID.randomUUID();
+        UUID originalTxId = UUID.randomUUID();
+        OffsetDateTime from = OffsetDateTime.parse("2026-07-01T00:00:00Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-08-01T00:00:00Z");
+        ReportingTransaction tx = ReportingTransaction.builder()
+                .id(txId)
+                .originalTxId(originalTxId)
+                .fromAccountNumber("1001")
+                .toAccountNumber("2002")
+                .fromOwnerName("Sender")
+                .toOwnerName("Receiver")
+                .amount(new BigDecimal("999.00"))
+                .currency("VND")
+                .status("COMPLETED")
+                .description("top")
+                .createdAt(from.plusDays(1))
+                .build();
+
+        when(statementService.getTopTransactions(accountId, from, to, 5))
+                .thenReturn(List.of(tx));
+
+        var response = controller.getTopTransactions(accountId, from, to, 5, null);
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().data()).hasSize(1);
+        assertThat(response.getBody().data().getFirst().id()).isEqualTo(txId);
+        assertThat(response.getBody().data().getFirst().originalTxId()).isEqualTo(originalTxId);
+        assertThat(response.getBody().data().getFirst().amount()).isEqualByComparingTo("999.00");
     }
 
     @Test

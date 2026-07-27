@@ -40,7 +40,7 @@ public class BackfillService {
 
         Page<TransactionView> batch;
         do {
-            batch = transactionViewRepository.findAllByCreatedAtAfterOrderByCreatedAtAsc(
+            batch = transactionViewRepository.findAllByCreatedAtAfterOrderByCreatedAtAscIdAsc(
                     since, PageRequest.of(page, BATCH_SIZE));
 
             long synced = processBatch(batch.getContent());
