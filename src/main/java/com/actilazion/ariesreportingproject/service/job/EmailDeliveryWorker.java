@@ -77,7 +77,7 @@ public class EmailDeliveryWorker {
     }
 
     private Duration retryDelay(int attempt) {
-        long multiplier = 1L << Math.min(Math.max(attempt, 0), 6);
+        long multiplier = 1L << Math.clamp(attempt, 0, 6);
         Duration delay = properties.getRetryBaseDelay().multipliedBy(multiplier);
         return delay.compareTo(properties.getRetryMaxDelay()) > 0
                 ? properties.getRetryMaxDelay() : delay;
