@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -28,6 +30,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class ExportOrchestrator {
+    private static final int STALE_JOB_MINUTES = 5;
+
     private final ReportJobRepository reportJobRepository;
     private final ExportJobProcessor exportJobProcessor;
 
@@ -47,7 +51,7 @@ public class ExportOrchestrator {
                 .build();
 
         job = reportJobRepository.save(job);
-        exportJobProcessor.processJob(job.getId());
+        processJobAfterCommit(job.getId());
 
         log.info("[EXPORT] Job created jobId={} format={}", job.getId(), request.format());
         return ReportJobResponse.from(job, baseUrl);
@@ -108,9 +112,35 @@ public class ExportOrchestrator {
         }
     }
 
+    @Scheduled(fixedDelayString = "${app.reporting.export-recovery-delay-ms:300000}")
+    public void recoverStaleJobs() {
+        OffsetDateTime threshold = OffsetDateTime.now().minusMinutes(STALE_JOB_MINUTES);
+        List<ReportJob> staleJobs = reportJobRepository.findAllByStatusInAndCreatedAtBefore(
+                List.of(ReportJobStatus.PENDING, ReportJobStatus.PROCESSING),
+                threshold);
+
+        for (ReportJob job : staleJobs) {
+            log.info("[EXPORT] Recovering stale jobId={} status={}", job.getId(), job.getStatus());
+            exportJobProcessor.processJob(job.getId());
+        }
+    }
+
     private void requireJobAccess(ReportJob job, UUID requestedBy, boolean isAdmin) {
         if (!isAdmin && !job.getRequestedBy().equals(requestedBy)) {
             throw new AccessDeniedException("Access denied to export job");
         }
+    }
+
+    private void processJobAfterCommit(UUID jobId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            exportJobProcessor.processJob(jobId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                exportJobProcessor.processJob(jobId);
+            }
+        });
     }
 }

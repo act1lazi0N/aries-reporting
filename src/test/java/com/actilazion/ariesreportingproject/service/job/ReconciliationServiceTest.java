@@ -11,10 +11,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
 
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ReconciliationServiceTest {
@@ -30,8 +34,9 @@ class ReconciliationServiceTest {
     @Test
     @DisplayName("runReconciliation: does not trigger backfill when counts match")
     void runReconciliation_noMismatch_noBackfill() {
-        when(txViewRepo.countByCreatedAtAfter(any())).thenReturn(100L);
-        when(reportingRepo.countByCreatedAtAfter(any())).thenReturn(100L);
+        UUID txId = UUID.randomUUID();
+        when(txViewRepo.findIdsByCreatedAtAfter(any())).thenReturn(List.of(txId));
+        when(reportingRepo.findSyncedTxIdsByCreatedAtAfter(any())).thenReturn(List.of(txId));
 
         reconciliationService.runReconciliation();
 
@@ -41,8 +46,9 @@ class ReconciliationServiceTest {
     @Test
     @DisplayName("runReconciliation: triggers backfill when a mismatch is detected")
     void runReconciliation_mismatch_triggersBackfill() {
-        when(txViewRepo.countByCreatedAtAfter(any())).thenReturn(100L);
-        when(reportingRepo.countByCreatedAtAfter(any())).thenReturn(95L);  // missing 5
+        UUID txId = UUID.randomUUID();
+        when(txViewRepo.findIdsByCreatedAtAfter(any())).thenReturn(List.of(txId));
+        when(reportingRepo.findSyncedTxIdsByCreatedAtAfter(any())).thenReturn(List.of());
         when(backfillService.backfill(any(OffsetDateTime.class))).thenReturn(5L);
 
         reconciliationService.runReconciliation();
@@ -53,13 +59,26 @@ class ReconciliationServiceTest {
     @Test
     @DisplayName("runReconciliation: reporting exceeds source, so no backfill for phantom data")
     void runReconciliation_reportingExceedsSource_noBackfill() {
-        when(txViewRepo.countByCreatedAtAfter(any())).thenReturn(95L);
-        when(reportingRepo.countByCreatedAtAfter(any())).thenReturn(100L); // exceeds source
+        UUID phantomId = UUID.randomUUID();
+        when(txViewRepo.findIdsByCreatedAtAfter(any())).thenReturn(List.of());
+        when(reportingRepo.findSyncedTxIdsByCreatedAtAfter(any())).thenReturn(List.of(phantomId));
 
         reconciliationService.runReconciliation();
 
         // Reporting exceeds the source, which indicates phantom data that needs manual investigation.
         // Backfill cannot resolve this case.
         verify(backfillService, never()).backfill(any());
+    }
+
+    @Test
+    @DisplayName("runReconciliation: triggers backfill when counts match but ids differ")
+    void runReconciliation_equalCountsDifferentIds_triggersBackfill() {
+        when(txViewRepo.findIdsByCreatedAtAfter(any())).thenReturn(List.of(UUID.randomUUID()));
+        when(reportingRepo.findSyncedTxIdsByCreatedAtAfter(any())).thenReturn(List.of(UUID.randomUUID()));
+        when(backfillService.backfill(any(OffsetDateTime.class))).thenReturn(1L);
+
+        reconciliationService.runReconciliation();
+
+        verify(backfillService).backfill(any(OffsetDateTime.class));
     }
 }

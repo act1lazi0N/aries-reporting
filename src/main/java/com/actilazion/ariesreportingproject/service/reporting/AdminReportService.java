@@ -81,9 +81,11 @@ public class AdminReportService {
         }
 
         long completed = 0, failed = 0, pending = 0;
+        totalTransactions = 0;
         for (Object[] row : statusCounts) {
             String status = row[0].toString();
             long count = ((Number) row[1]).longValue();
+            totalTransactions += count;
             switch (status) {
                 case "COMPLETED" -> completed = count;
                 case "FAILED" -> failed = count;

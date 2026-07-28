@@ -33,6 +33,9 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 management:
+  health:
+    mail:
+      enabled: false
   endpoint:
     health:
       show-details: never
@@ -40,3 +43,4 @@ management:
 app:
   reporting:
     export-dir: /app/exports   # mounted volume in docker-compose.yml
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:3000}

@@ -6,7 +6,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(
         exclude = {
@@ -16,7 +15,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         }
 )
 @EnableConfigurationProperties
-@EnableScheduling
 public class AriesReportingProjectApplication {
     public static void main(String[] args) {
         SpringApplication.run(AriesReportingProjectApplication.class, args);

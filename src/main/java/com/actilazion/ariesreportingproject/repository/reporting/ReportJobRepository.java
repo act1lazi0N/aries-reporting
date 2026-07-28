@@ -22,4 +22,5 @@ public interface ReportJobRepository extends JpaRepository<ReportJob, UUID> {
     // Retrieves report jobs whose status is in the given list and were created before the threshold.
     List<ReportJob> findAllByStatusInAndCreatedAtBefore(
             List<ReportJobStatus> statuses, OffsetDateTime threshold);
+
 }

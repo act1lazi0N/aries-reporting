@@ -15,9 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,8 +36,11 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class StatementService {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
     private final ReportingTransactionRepository transactionRepository;
     private final MonthlySnapshotRepository snapshotRepository;
+    private final Clock clock;
 
     /**
      * Returns an account statement for the requested period.
@@ -50,7 +54,7 @@ public class StatementService {
             Pageable pageable) {
         validatePeriod(from, to);
 
-        YearMonth currentMonth = YearMonth.now();
+        YearMonth currentMonth = currentBusinessMonth();
         boolean includesCurrentMonth = !from.isAfter(currentMonth)
                 && !to.isBefore(currentMonth);
 
@@ -79,14 +83,11 @@ public class StatementService {
         }
 
         // Current month: query on the fly.
-        OffsetDateTime periodStart = from.atDay(1)
-                .atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime periodEnd = to.atEndOfMonth()
-                .atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
+        OffsetDateTime periodStart = monthStart(from);
+        OffsetDateTime periodEnd = monthEndExclusive(to);
         if (includesCurrentMonth) {
-            OffsetDateTime currentMonthStart = currentMonth.atDay(1)
-                    .atStartOfDay().atOffset(ZoneOffset.UTC);
-            OffsetDateTime now = OffsetDateTime.now();
+            OffsetDateTime currentMonthStart = monthStart(currentMonth);
+            OffsetDateTime now = OffsetDateTime.now(clock.withZone(BUSINESS_ZONE));
 
             BigDecimal currentDebit = transactionRepository.sumDebitByAccountAndPeriod(
                     accountId, currentMonthStart, now);
@@ -124,7 +125,7 @@ public class StatementService {
             UUID accountId, int year, int month
     ) {
         YearMonth ym = YearMonth.of(year, month);
-        YearMonth currentMonth = YearMonth.now();
+        YearMonth currentMonth = currentBusinessMonth();
 
         // Past months use snapshots.
         if (ym.isBefore(currentMonth)) {
@@ -145,8 +146,8 @@ public class StatementService {
                     .orElse(emptyMonthlySummary(accountId, year, month));
         }
 
-        OffsetDateTime start = ym.atDay(1).atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime end = OffsetDateTime.now();
+        OffsetDateTime start = monthStart(ym);
+        OffsetDateTime end = OffsetDateTime.now(clock.withZone(BUSINESS_ZONE));
 
         BigDecimal debit = transactionRepository.sumDebitByAccountAndPeriod(
                 accountId, start, end);
@@ -211,6 +212,18 @@ public class StatementService {
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("from must be before or equal to to");
         }
+    }
+
+    private YearMonth currentBusinessMonth() {
+        return YearMonth.now(clock.withZone(BUSINESS_ZONE));
+    }
+
+    private OffsetDateTime monthStart(YearMonth month) {
+        return month.atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
+    }
+
+    private OffsetDateTime monthEndExclusive(YearMonth month) {
+        return month.plusMonths(1).atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
     }
 
 }

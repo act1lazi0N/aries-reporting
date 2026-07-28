@@ -1,9 +1,23 @@
 package com.actilazion.ariesreportingproject.entity.reporting;
 
 import com.actilazion.ariesreportingproject.enums.EmailStatus;
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -29,14 +43,16 @@ public class EmailLog {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "billing_month", nullable = false, length = 7)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "billing_month", nullable = false, length = 7, columnDefinition = "char(7)")
     private String billingMonth;
 
     @Column(name = "idempotency_key", nullable = false, length = 100)
     private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "email_status")
     private EmailStatus status;
 
     @Column(name = "error_message", length = 500)

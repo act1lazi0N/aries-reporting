@@ -3,8 +3,19 @@ package com.actilazion.ariesreportingproject.entity.reporting;
 import com.actilazion.ariesreportingproject.enums.ReportFormat;
 import com.actilazion.ariesreportingproject.enums.ReportJobStatus;
 import com.actilazion.ariesreportingproject.enums.ReportJobType;
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -29,16 +40,19 @@ public class ReportJob {
     private UUID requestedBy;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "job_type", nullable = false, length = 30)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "job_type", nullable = false, columnDefinition = "report_job_type")
     private ReportJobType jobType;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "report_job_status")
     @Builder.Default
     private ReportJobStatus status = ReportJobStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "report_format")
     private ReportFormat format;
 
     @JdbcTypeCode(SqlTypes.JSON)

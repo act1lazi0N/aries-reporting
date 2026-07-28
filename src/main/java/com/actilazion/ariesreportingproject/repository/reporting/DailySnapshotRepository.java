@@ -15,6 +15,10 @@ public interface DailySnapshotRepository extends JpaRepository<DailySnapshot, UU
     Optional<DailySnapshot> findByAccountIdAndSnapshotDate(
             UUID accountId, LocalDate snapshotDate);
 
+    // Finds the latest snapshot before a target business day for opening balance carry-forward.
+    Optional<DailySnapshot> findFirstByAccountIdAndSnapshotDateBeforeOrderBySnapshotDateDesc(
+            UUID accountId, LocalDate snapshotDate);
+
     // Checks whether a daily snapshot already exists for an account and snapshot date.
     boolean existsByAccountIdAndSnapshotDate(
             UUID accountId, LocalDate snapshotDate);
