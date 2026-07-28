@@ -12,6 +12,8 @@ import com.actilazion.ariesreportingproject.service.reporting.StatementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +37,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MonthlyEmailJob {
     private static final int MAX_EMAIL_STATEMENT_ROWS = 500;
+    private static final int ACTIVE_USER_PAGE_SIZE = 100;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final StatementService statementService;
@@ -52,43 +55,42 @@ public class MonthlyEmailJob {
 
         log.info("[EMAIL-JOB] Starting monthly email job for billing month: {}", billingMonth);
 
-        // Retrieve all users with accounts in the system
-        List<UUID> addUserIds = userViewRepository.findAll()
-                .stream()
-                .filter(u -> Boolean.TRUE.equals(u.getIsActive()))
-                .map(u -> u.getId())
-                .toList();
         int sent = 0, skipped = 0, failed = 0;
 
-        for (UUID userId : addUserIds) {
-            String idempotencyKey = EmailLog.buildIdempotencyKey(userId, billingMonth);
+        Slice<UUID> activeUsers;
+        int pageNumber = 0;
+        do {
+            activeUsers = userViewRepository.findActiveUserIds(PageRequest.of(
+                    pageNumber++, ACTIVE_USER_PAGE_SIZE, Sort.by(Sort.Direction.ASC, "id")));
+            for (UUID userId : activeUsers.getContent()) {
+                String idempotencyKey = EmailLog.buildIdempotencyKey(userId, billingMonth);
 
-            EmailLog claim = emailDeliveryClaimService.claim(userId, billingMonth, idempotencyKey)
-                    .orElse(null);
-            if (claim == null) {
-                skipped++;
-                continue;
-            }
-
-            try {
-                boolean success = sendToUser(userId, billingMonth, lastMonth);
-                if (success) {
-                    emailDeliveryClaimService.complete(claim.getId(), EmailStatus.SENT, null);
-                    sent++;
-                } else {
-                    emailDeliveryClaimService.complete(claim.getId(), EmailStatus.SKIPPED, "No transactions this month");
+                EmailLog claim = emailDeliveryClaimService.claim(userId, billingMonth, idempotencyKey)
+                        .orElse(null);
+                if (claim == null) {
                     skipped++;
+                    continue;
                 }
 
-                // Rate limiting
-                Thread.sleep(100);
-            } catch (Exception e) {
-                log.error("[EMAIL-JOB] Failed for userId={}: {}",
-                        userId, e.getMessage());
-                emailDeliveryClaimService.complete(claim.getId(), EmailStatus.FAILED, "Email send failed");
-                failed++;
+                try {
+                    boolean success = sendToUser(userId, billingMonth, lastMonth);
+                    if (success) {
+                        emailDeliveryClaimService.complete(claim.getId(), EmailStatus.SENT, null);
+                        sent++;
+                    } else {
+                        emailDeliveryClaimService.complete(claim.getId(), EmailStatus.SKIPPED, "No transactions this month");
+                        skipped++;
+                    }
+
+                    // Rate limiting
+                    Thread.sleep(100);
+                } catch (Exception e) {
+                    log.error("[EMAIL-JOB] Failed for userId={}: {}", userId, e.getMessage());
+                    emailDeliveryClaimService.complete(claim.getId(), EmailStatus.FAILED, "Email send failed");
+                    failed++;
+                }
             }
-        }
+        } while (activeUsers.hasNext());
         log.info("[EMAIL-JOB] Done. month={} sent={} skipped={} failed={}",
                 billingMonth, sent, skipped, failed);
     }

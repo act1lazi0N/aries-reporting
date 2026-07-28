@@ -17,6 +17,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -59,8 +61,6 @@ class MonthlyEmailJobTest {
         YearMonth billingMonth = YearMonth.of(2026, 6);
 
         UserView user = mock(UserView.class);
-        when(user.getId()).thenReturn(userId);
-        when(user.getIsActive()).thenReturn(true);
         when(user.getEmail()).thenReturn("user@example.test");
         when(user.getFullName()).thenReturn("User One");
 
@@ -77,7 +77,12 @@ class MonthlyEmailJobTest {
                 .status(EmailStatus.SENDING)
                 .build();
 
-        when(userViewRepository.findAll()).thenReturn(List.of(user));
+        when(userViewRepository.findActiveUserIds(
+                PageRequest.of(0, 100, Sort.by(Sort.Direction.ASC, "id"))))
+                .thenReturn(new SliceImpl<>(List.of(userId), PageRequest.of(0, 100), true));
+        when(userViewRepository.findActiveUserIds(
+                PageRequest.of(1, 100, Sort.by(Sort.Direction.ASC, "id"))))
+                .thenReturn(new SliceImpl<>(List.of(), PageRequest.of(1, 100), false));
         when(emailDeliveryClaimService.claim(
                 eq(userId),
                 eq(billingMonth.toString()),
