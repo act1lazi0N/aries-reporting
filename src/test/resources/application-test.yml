@@ -73,6 +73,12 @@ app:
     export-ttl-hours: 1
     mail-from: test@aries.local
     cache-ttl-minutes: 1
+    email:
+      dispatch-delay-ms: 60000
+      lease-duration: PT5M
+      retry-base-delay: PT1S
+      retry-max-delay: PT1M
+      rate-limit-retry-delay: PT0.1S
 
 # Logging
 logging:
