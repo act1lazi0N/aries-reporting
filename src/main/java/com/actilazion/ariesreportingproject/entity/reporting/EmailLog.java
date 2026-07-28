@@ -51,7 +51,8 @@ public class EmailLog {
     private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "email_status")
     private EmailStatus status;
 
     @Column(name = "error_message", length = 500)

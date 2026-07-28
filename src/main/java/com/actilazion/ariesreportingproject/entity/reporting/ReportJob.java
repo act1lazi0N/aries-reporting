@@ -40,16 +40,19 @@ public class ReportJob {
     private UUID requestedBy;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "job_type", nullable = false, length = 30)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "job_type", nullable = false, columnDefinition = "report_job_type")
     private ReportJobType jobType;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "report_job_status")
     @Builder.Default
     private ReportJobStatus status = ReportJobStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "report_format")
     private ReportFormat format;
 
     @JdbcTypeCode(SqlTypes.JSON)
