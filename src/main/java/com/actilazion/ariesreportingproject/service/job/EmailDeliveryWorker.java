@@ -46,17 +46,17 @@ public class EmailDeliveryWorker {
         int attempt = delivery.getAttemptCount();
         try {
             if (!rateLimiter.tryAcquire()) {
-                deliveryQueue.retry(delivery.getId(), "SMTP rate limit", OffsetDateTime.now(clock)
+                deliveryQueue.retry(delivery.getId(), delivery.getClaimToken(), "SMTP rate limit", OffsetDateTime.now(clock)
                         .plus(properties.getRateLimitRetryDelay()));
                 return;
             }
 
-            attempt = deliveryQueue.incrementAttempt(delivery.getId());
+            attempt = deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken());
             YearMonth billingMonth = YearMonth.parse(delivery.getBillingMonth());
             if (sendToUser(delivery.getUserId(), delivery.getBillingMonth(), billingMonth)) {
-                deliveryQueue.complete(delivery.getId(), EmailStatus.SENT, null);
+                deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SENT, null);
             } else {
-                deliveryQueue.complete(delivery.getId(), EmailStatus.SKIPPED,
+                deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SKIPPED,
                         "No transactions this month");
             }
         } catch (Exception exception) {
@@ -69,10 +69,10 @@ public class EmailDeliveryWorker {
         log.error("[EMAIL-WORKER] Failed deliveryId={} userId={} attempt={}: {}",
                 delivery.getId(), delivery.getUserId(), attempt, exception.getMessage());
         if (attempt >= properties.getMaxAttempts()) {
-            deliveryQueue.complete(delivery.getId(), EmailStatus.FAILED, reason);
+            deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.FAILED, reason);
             return;
         }
-        deliveryQueue.retry(delivery.getId(), reason, OffsetDateTime.now(clock)
+        deliveryQueue.retry(delivery.getId(), delivery.getClaimToken(), reason, OffsetDateTime.now(clock)
                 .plus(retryDelay(attempt)));
     }
 

@@ -32,6 +32,7 @@ public class EmailDeliveryClaimService {
         OffsetDateTime leaseUntil = now.plus(properties.getLeaseDuration());
         for (EmailLog delivery : due) {
             delivery.setStatus(EmailStatus.SENDING);
+            delivery.setClaimToken(UUID.randomUUID());
             delivery.setLeaseUntil(leaseUntil);
             delivery.setErrorMessage(null);
         }
@@ -40,15 +41,15 @@ public class EmailDeliveryClaimService {
     }
 
     @Transactional(transactionManager = "reportingTransactionManager")
-    public int incrementAttempt(UUID emailLogId) {
-        EmailLog delivery = find(emailLogId);
+    public int incrementAttempt(UUID emailLogId, UUID claimToken) {
+        EmailLog delivery = findClaimed(emailLogId, claimToken);
         delivery.setAttemptCount(delivery.getAttemptCount() + 1);
         return emailLogRepository.saveAndFlush(delivery).getAttemptCount();
     }
 
     @Transactional(transactionManager = "reportingTransactionManager")
-    public void complete(UUID emailLogId, EmailStatus status, String errorReason) {
-        EmailLog delivery = find(emailLogId);
+    public void complete(UUID emailLogId, UUID claimToken, EmailStatus status, String errorReason) {
+        EmailLog delivery = findClaimed(emailLogId, claimToken);
         delivery.setStatus(status);
         delivery.setErrorMessage(errorReason);
         delivery.setLeaseUntil(null);
@@ -59,8 +60,8 @@ public class EmailDeliveryClaimService {
     }
 
     @Transactional(transactionManager = "reportingTransactionManager")
-    public void retry(UUID emailLogId, String errorReason, OffsetDateTime nextAttemptAt) {
-        EmailLog delivery = find(emailLogId);
+    public void retry(UUID emailLogId, UUID claimToken, String errorReason, OffsetDateTime nextAttemptAt) {
+        EmailLog delivery = findClaimed(emailLogId, claimToken);
         delivery.setStatus(EmailStatus.PENDING);
         delivery.setErrorMessage(errorReason);
         delivery.setLeaseUntil(null);
@@ -68,8 +69,8 @@ public class EmailDeliveryClaimService {
         emailLogRepository.save(delivery);
     }
 
-    private EmailLog find(UUID emailLogId) {
-        return emailLogRepository.findById(emailLogId)
-                .orElseThrow(() -> new IllegalStateException("Email delivery not found"));
+    private EmailLog findClaimed(UUID emailLogId, UUID claimToken) {
+        return emailLogRepository.findClaimedForUpdate(emailLogId, EmailStatus.SENDING, claimToken)
+                .orElseThrow(() -> new IllegalStateException("Email delivery claim is no longer active"));
     }
 }

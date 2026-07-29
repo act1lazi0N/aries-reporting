@@ -29,7 +29,7 @@ public class EmailDeliveryDispatcher {
             try {
                 emailTaskExecutor.execute(() -> worker.process(delivery));
             } catch (RuntimeException rejected) {
-                deliveryQueue.retry(delivery.getId(), "Email executor saturated",
+                deliveryQueue.retry(delivery.getId(), delivery.getClaimToken(), "Email executor saturated",
                         OffsetDateTime.now(clock).plus(properties.getRateLimitRetryDelay()));
                 log.warn("[EMAIL-DISPATCHER] Executor rejected deliveryId={}", delivery.getId());
             }

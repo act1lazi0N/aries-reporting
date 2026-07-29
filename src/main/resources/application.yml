@@ -64,6 +64,10 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      # Bound network waits so a stalled SMTP server cannot hold a worker past its lease.
+      mail.smtp.connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:10000}
+      mail.smtp.timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:30000}
+      mail.smtp.writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:30000}
 
   # Quartz
   quartz:

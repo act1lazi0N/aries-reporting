@@ -54,7 +54,7 @@ class EmailDeliveryWorkerTest {
         when(user.getEmail()).thenReturn("user@example.test");
         when(user.getFullName()).thenReturn("User");
         when(rateLimiter.tryAcquire()).thenReturn(true);
-        when(deliveryQueue.incrementAttempt(delivery.getId())).thenReturn(1);
+        when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
         when(accountViewRepository.findAllByUserId(userId)).thenReturn(List.of(account));
         when(statementService.getStatement(eq(accountId), eq(java.time.YearMonth.of(2026, 6)),
                 eq(java.time.YearMonth.of(2026, 6)), eq(PageRequest.of(0, 500))))
@@ -68,7 +68,7 @@ class EmailDeliveryWorkerTest {
 
         verify(emailService).sendMonthlyStatement(eq("user@example.test"), eq("User"),
                 eq("2026-06"), any(), eq(List.of()));
-        verify(deliveryQueue).complete(delivery.getId(), EmailStatus.SENT, null);
+        verify(deliveryQueue).complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SENT, null);
     }
 
     @Test
@@ -78,9 +78,10 @@ class EmailDeliveryWorkerTest {
 
         worker().process(delivery);
 
-        verify(deliveryQueue).retry(eq(delivery.getId()), eq("SMTP rate limit"), any());
+        verify(deliveryQueue).retry(eq(delivery.getId()), eq(delivery.getClaimToken()),
+                eq("SMTP rate limit"), any());
         verify(emailService, never()).sendMonthlyStatement(any(), any(), any(), any(), any());
-        verify(deliveryQueue, never()).incrementAttempt(any());
+        verify(deliveryQueue, never()).incrementAttempt(any(), any());
     }
 
     @Test
@@ -89,13 +90,13 @@ class EmailDeliveryWorkerTest {
         EmailDeliveryProperties properties = new EmailDeliveryProperties();
         properties.setMaxAttempts(1);
         when(rateLimiter.tryAcquire()).thenReturn(true);
-        when(deliveryQueue.incrementAttempt(delivery.getId())).thenReturn(1);
+        when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
         when(accountViewRepository.findAllByUserId(delivery.getUserId()))
                 .thenThrow(new IllegalStateException("source unavailable"));
 
         worker(properties).process(delivery);
 
-        verify(deliveryQueue).complete(delivery.getId(), EmailStatus.FAILED,
+        verify(deliveryQueue).complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.FAILED,
                 "Email delivery failed");
     }
 
@@ -115,6 +116,7 @@ class EmailDeliveryWorkerTest {
                 .userId(userId)
                 .billingMonth("2026-06")
                 .idempotencyKey(EmailLog.buildIdempotencyKey(userId, "2026-06"))
+                .claimToken(UUID.randomUUID())
                 .status(EmailStatus.SENDING)
                 .build();
     }

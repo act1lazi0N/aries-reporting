@@ -29,6 +29,15 @@ public class MonthlyEmailJob {
 
     @Scheduled(cron = "0 0 8 1 * *", zone = "Asia/Ho_Chi_Minh")
     public void sendMonthlyStatements() {
+        enqueueMonthlyStatements();
+    }
+
+    @Scheduled(cron = "0 30 8 * * *", zone = "Asia/Ho_Chi_Minh")
+    public void recoverMonthlyStatementPlanning() {
+        enqueueMonthlyStatements();
+    }
+
+    private void enqueueMonthlyStatements() {
         YearMonth billingMonth = YearMonth.now(clock.withZone(BUSINESS_ZONE)).minusMonths(1);
         int queued = 0;
         Slice<UUID> activeUsers;
@@ -39,8 +48,13 @@ public class MonthlyEmailJob {
                     Sort.by(Sort.Direction.ASC, "id")));
             for (UUID userId : activeUsers.getContent()) {
                 String month = billingMonth.toString();
-                deliveryQueue.enqueue(userId, month, EmailLog.buildIdempotencyKey(userId, month));
-                queued++;
+                try {
+                    deliveryQueue.enqueue(userId, month, EmailLog.buildIdempotencyKey(userId, month));
+                    queued++;
+                } catch (RuntimeException exception) {
+                    log.error("[EMAIL-JOB] Failed to enqueue userId={} month={}: {}",
+                            userId, month, exception.getMessage());
+                }
             }
         } while (activeUsers.hasNext());
 

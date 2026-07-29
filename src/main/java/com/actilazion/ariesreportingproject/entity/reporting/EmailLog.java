@@ -52,6 +52,9 @@ public class EmailLog {
     @Column(name = "idempotency_key", nullable = false, length = 100)
     private String idempotencyKey;
 
+    @Column(name = "claim_token", nullable = false)
+    private UUID claimToken;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "email_status")
@@ -85,6 +88,9 @@ public class EmailLog {
     void initializeDeliveryState() {
         if (nextAttemptAt == null) {
             nextAttemptAt = OffsetDateTime.now(java.time.ZoneOffset.UTC);
+        }
+        if (claimToken == null) {
+            claimToken = UUID.randomUUID();
         }
     }
 

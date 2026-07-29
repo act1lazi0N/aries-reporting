@@ -1,6 +1,7 @@
 package com.actilazion.ariesreportingproject.repository.reporting;
 
 import com.actilazion.ariesreportingproject.entity.reporting.EmailLog;
+import com.actilazion.ariesreportingproject.enums.EmailStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -34,6 +35,17 @@ public interface EmailLogRepository extends JpaRepository<EmailLog, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM EmailLog e WHERE e.idempotencyKey = :idempotencyKey")
     Optional<EmailLog> findByIdempotencyKeyForUpdate(String idempotencyKey);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT e FROM EmailLog e
+            WHERE e.id = :emailLogId
+              AND e.status = :status
+              AND e.claimToken = :claimToken
+            """)
+    Optional<EmailLog> findClaimedForUpdate(@Param("emailLogId") UUID emailLogId,
+                                            @Param("status") EmailStatus status,
+                                            @Param("claimToken") UUID claimToken);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(value = """

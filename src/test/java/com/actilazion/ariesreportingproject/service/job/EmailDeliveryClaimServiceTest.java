@@ -14,9 +14,11 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +52,7 @@ class EmailDeliveryClaimServiceTest {
         assertThat(claimed).containsExactly(delivery);
         assertThat(delivery.getStatus()).isEqualTo(EmailStatus.SENDING);
         assertThat(delivery.getLeaseUntil()).isEqualTo(now.plusMinutes(5));
+        assertThat(delivery.getClaimToken()).isNotNull();
         verify(emailLogRepository).flush();
     }
 
@@ -62,5 +65,23 @@ class EmailDeliveryClaimServiceTest {
         service.enqueue(userId, "2026-06", userId + "::2026-06");
 
         verify(emailLogRepository).insertPending(userId, "2026-06", userId + "::2026-06");
+    }
+
+    @Test
+    void complete_rejectsStaleClaimAfterLeaseRecovery() {
+        UUID emailLogId = UUID.randomUUID();
+        UUID staleToken = UUID.randomUUID();
+        EmailDeliveryProperties properties = new EmailDeliveryProperties();
+        when(emailLogRepository.findClaimedForUpdate(
+                eq(emailLogId), eq(EmailStatus.SENDING), eq(staleToken)))
+                .thenReturn(Optional.empty());
+
+        EmailDeliveryClaimService service = new EmailDeliveryClaimService(
+                emailLogRepository, properties, Clock.systemUTC());
+
+        assertThatThrownBy(() -> service.complete(
+                emailLogId, staleToken, EmailStatus.SENT, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Email delivery claim is no longer active");
     }
 }
