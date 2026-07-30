@@ -105,6 +105,8 @@ app:
       retry-base-delay: ${EMAIL_RETRY_BASE_DELAY:PT30S}
       retry-max-delay: ${EMAIL_RETRY_MAX_DELAY:PT1H}
       rate-limit-retry-delay: ${EMAIL_RATE_LIMIT_RETRY_DELAY:PT0.25S}
+      # Provisional safety window only; set from measured MQ projection p99 + recovery margin.
+      empty-statement-grace-period: ${EMAIL_EMPTY_STATEMENT_GRACE_PERIOD:PT6H}
       permits-per-second: ${EMAIL_PERMITS_PER_SECOND:10}
       burst-capacity: ${EMAIL_BURST_CAPACITY:10}
       rate-limit-key: ${EMAIL_RATE_LIMIT_KEY:aries:email:rate:smtp}

@@ -20,6 +20,7 @@ import org.springframework.data.domain.PageRequest;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -56,7 +57,7 @@ class EmailDeliveryWorkerTest {
         when(rateLimiter.tryAcquire()).thenReturn(true);
         when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
         when(accountViewRepository.findAllByUserId(userId)).thenReturn(List.of(account));
-        when(statementService.getStatement(eq(accountId), eq(java.time.YearMonth.of(2026, 6)),
+        when(statementService.getLiveStatement(eq(accountId), eq(java.time.YearMonth.of(2026, 6)),
                 eq(java.time.YearMonth.of(2026, 6)), eq(PageRequest.of(0, 500))))
                 .thenReturn(statement(accountId));
         when(reportingTransactionRepository.findTopByAccountAndPeriod(
@@ -67,21 +68,35 @@ class EmailDeliveryWorkerTest {
         worker().process(delivery);
 
         verify(emailService).sendMonthlyStatement(eq("user@example.test"), eq("User"),
-                eq("2026-06"), any(), eq(List.of()));
+                eq("2026-06"), any(), eq(List.of()), eq(delivery.getIdempotencyKey()));
         verify(deliveryQueue).complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SENT, null);
     }
 
     @Test
     void process_withoutPermit_requeuesWithoutSending() {
-        EmailLog delivery = delivery(UUID.randomUUID());
+        UUID userId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        EmailLog delivery = delivery(userId);
+        AccountView account = org.mockito.Mockito.mock(AccountView.class);
+        UserView user = org.mockito.Mockito.mock(UserView.class);
+        when(account.getId()).thenReturn(accountId);
+        when(user.getEmail()).thenReturn("user@example.test");
+        when(user.getFullName()).thenReturn("User");
+        when(accountViewRepository.findAllByUserId(userId)).thenReturn(List.of(account));
+        when(statementService.getLiveStatement(eq(accountId), any(), any(), any()))
+                .thenReturn(statement(accountId));
+        when(reportingTransactionRepository.findTopByAccountAndPeriod(any(), any(), any(), any()))
+                .thenReturn(List.of());
+        when(userViewRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
         when(rateLimiter.tryAcquire()).thenReturn(false);
 
         worker().process(delivery);
 
         verify(deliveryQueue).retry(eq(delivery.getId()), eq(delivery.getClaimToken()),
                 eq("SMTP rate limit"), any());
-        verify(emailService, never()).sendMonthlyStatement(any(), any(), any(), any(), any());
-        verify(deliveryQueue, never()).incrementAttempt(any(), any());
+        verify(emailService, never()).sendMonthlyStatement(any(), any(), any(), any(), any(), any());
+        verify(deliveryQueue).incrementAttempt(delivery.getId(), delivery.getClaimToken());
     }
 
     @Test
@@ -89,7 +104,6 @@ class EmailDeliveryWorkerTest {
         EmailLog delivery = delivery(UUID.randomUUID());
         EmailDeliveryProperties properties = new EmailDeliveryProperties();
         properties.setMaxAttempts(1);
-        when(rateLimiter.tryAcquire()).thenReturn(true);
         when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
         when(accountViewRepository.findAllByUserId(delivery.getUserId()))
                 .thenThrow(new IllegalStateException("source unavailable"));
@@ -98,6 +112,46 @@ class EmailDeliveryWorkerTest {
 
         verify(deliveryQueue).complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.FAILED,
                 "Email delivery failed");
+    }
+
+    @Test
+    void process_withoutTransactions_requeuesDuringGracePeriod() {
+        UUID userId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        EmailLog delivery = delivery(userId);
+        delivery.setCreatedAt(OffsetDateTime.parse("2026-06-30T22:00:00Z"));
+        AccountView account = org.mockito.Mockito.mock(AccountView.class);
+        when(account.getId()).thenReturn(accountId);
+        when(accountViewRepository.findAllByUserId(userId)).thenReturn(List.of(account));
+        when(statementService.getLiveStatement(eq(accountId), any(), any(), any()))
+                .thenReturn(emptyStatement(accountId));
+        when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
+
+        worker().process(delivery);
+
+        verify(deliveryQueue).retry(eq(delivery.getId()), eq(delivery.getClaimToken()),
+                eq("No transactions yet"), any());
+        verify(emailService, never()).sendMonthlyStatement(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void process_withoutTransactions_skipsAfterGracePeriod() {
+        UUID userId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        EmailLog delivery = delivery(userId);
+        delivery.setCreatedAt(OffsetDateTime.parse("2026-06-30T00:00:00Z"));
+        AccountView account = org.mockito.Mockito.mock(AccountView.class);
+        when(account.getId()).thenReturn(accountId);
+        when(accountViewRepository.findAllByUserId(userId)).thenReturn(List.of(account));
+        when(statementService.getLiveStatement(eq(accountId), any(), any(), any()))
+                .thenReturn(emptyStatement(accountId));
+        when(deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken())).thenReturn(1);
+
+        worker().process(delivery);
+
+        verify(deliveryQueue).complete(delivery.getId(), delivery.getClaimToken(),
+                EmailStatus.SKIPPED, "No transactions this month");
+        verify(emailService, never()).sendMonthlyStatement(any(), any(), any(), any(), any(), any());
     }
 
     private EmailDeliveryWorker worker() {
@@ -130,6 +184,18 @@ class EmailDeliveryWorkerTest {
                 .totalCredit(new BigDecimal("20.00"))
                 .netFlow(new BigDecimal("10.00"))
                 .txCount(1)
+                .build();
+    }
+
+    private AccountStatementResponse emptyStatement(UUID accountId) {
+        return AccountStatementResponse.builder()
+                .accountId(accountId)
+                .periodFrom("2026-06")
+                .periodTo("2026-06")
+                .totalDebit(BigDecimal.ZERO)
+                .totalCredit(BigDecimal.ZERO)
+                .netFlow(BigDecimal.ZERO)
+                .txCount(0)
                 .build();
     }
 }

@@ -47,7 +47,6 @@ public interface EmailLogRepository extends JpaRepository<EmailLog, UUID> {
                                             @Param("status") EmailStatus status,
                                             @Param("claimToken") UUID claimToken);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(value = """
             SELECT *
             FROM email_logs

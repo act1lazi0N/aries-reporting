@@ -132,6 +132,42 @@ public class StatementService {
     }
 
     /**
+     * Builds a statement directly from reporting transactions.
+     * Monthly email delivery uses this path because a finalized snapshot can
+     * predate a late-arriving message projection.
+     */
+    @Transactional(transactionManager = "reportingTransactionManager", readOnly = true)
+    public AccountStatementResponse getLiveStatement(
+            UUID accountId,
+            YearMonth from,
+            YearMonth to,
+            Pageable pageable) {
+        validatePeriod(from, to);
+
+        OffsetDateTime periodStart = monthStart(from);
+        OffsetDateTime periodEnd = monthEndExclusive(to);
+        BigDecimal totalDebit = transactionRepository.sumDebitByAccountAndPeriod(
+                accountId, periodStart, periodEnd);
+        BigDecimal totalCredit = transactionRepository.sumCreditByAccountAndPeriod(
+                accountId, periodStart, periodEnd);
+        int transactionCount = Math.toIntExact(transactionRepository.countByAccountAndPeriod(
+                accountId, periodStart, periodEnd));
+        Page<ReportingTransaction> transactions = transactionRepository
+                .findByAccountAndPeriod(accountId, periodStart, periodEnd, pageable);
+
+        return AccountStatementResponse.builder()
+                .accountId(accountId)
+                .periodFrom(from.toString())
+                .periodTo(to.toString())
+                .totalDebit(totalDebit)
+                .totalCredit(totalCredit)
+                .netFlow(totalCredit.subtract(totalDebit))
+                .txCount(transactionCount)
+                .transactions(transactions.map(this::toSummary))
+                .build();
+    }
+
+    /**
      * Returns a monthly transaction summary for monthly charts.
      */
     @Transactional(transactionManager = "reportingTransactionManager", readOnly = true)

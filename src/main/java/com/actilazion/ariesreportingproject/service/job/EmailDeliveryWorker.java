@@ -45,20 +45,31 @@ public class EmailDeliveryWorker {
     public void process(EmailLog delivery) {
         int attempt = delivery.getAttemptCount();
         try {
-            if (!rateLimiter.tryAcquire()) {
-                deliveryQueue.retry(delivery.getId(), delivery.getClaimToken(), "SMTP rate limit", OffsetDateTime.now(clock)
-                        .plus(properties.getRateLimitRetryDelay()));
+            YearMonth billingMonth = YearMonth.parse(delivery.getBillingMonth());
+            attempt = deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken());
+            DeliveryContent content = buildContent(delivery.getUserId(), billingMonth);
+            OffsetDateTime now = OffsetDateTime.now(clock);
+            if (!content.hasTransactions()) {
+                if (withinEmptyStatementGracePeriod(delivery, now)) {
+                    deliveryQueue.retry(delivery.getId(), delivery.getClaimToken(),
+                            "No transactions yet", now.plus(properties.getRetryBaseDelay()));
+                } else {
+                    deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(),
+                            EmailStatus.SKIPPED, "No transactions this month");
+                }
                 return;
             }
 
-            attempt = deliveryQueue.incrementAttempt(delivery.getId(), delivery.getClaimToken());
-            YearMonth billingMonth = YearMonth.parse(delivery.getBillingMonth());
-            if (sendToUser(delivery.getUserId(), delivery.getBillingMonth(), billingMonth)) {
-                deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SENT, null);
-            } else {
-                deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SKIPPED,
-                        "No transactions this month");
+            if (!rateLimiter.tryAcquire()) {
+                deliveryQueue.retry(delivery.getId(), delivery.getClaimToken(), "SMTP rate limit",
+                        now.plus(properties.getRateLimitRetryDelay()));
+                return;
             }
+
+            emailService.sendMonthlyStatement(content.email(), content.fullName(),
+                    delivery.getBillingMonth(), content.statement(), content.topTransactions(),
+                    delivery.getIdempotencyKey());
+            deliveryQueue.complete(delivery.getId(), delivery.getClaimToken(), EmailStatus.SENT, null);
         } catch (Exception exception) {
             handleFailure(delivery, attempt, exception);
         }
@@ -83,16 +94,16 @@ public class EmailDeliveryWorker {
                 ? properties.getRetryMaxDelay() : delay;
     }
 
-    private boolean sendToUser(UUID userId, String billingMonth, YearMonth lastMonth) {
+    private DeliveryContent buildContent(UUID userId, YearMonth lastMonth) {
         var accounts = accountViewRepository.findAllByUserId(userId);
-        if (accounts.isEmpty()) return false;
+        if (accounts.isEmpty()) return DeliveryContent.empty();
 
         AccountStatementResponse statement = buildConsolidatedStatement(
                 accounts.stream().map(account -> account.getId()).toList(), lastMonth);
         if (statement.txCount() == 0
                 && statement.totalDebit().signum() == 0
                 && statement.totalCredit().signum() == 0) {
-            return false;
+            return DeliveryContent.empty();
         }
 
         OffsetDateTime monthStart = lastMonth.atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
@@ -106,10 +117,8 @@ public class EmailDeliveryWorker {
                 .toList();
 
         var user = userViewRepository.findById(userId).orElse(null);
-        if (user == null) return false;
-        emailService.sendMonthlyStatement(user.getEmail(), user.getFullName(), billingMonth,
-                statement, topTransactions);
-        return true;
+        if (user == null) return DeliveryContent.empty();
+        return new DeliveryContent(user.getEmail(), user.getFullName(), statement, topTransactions, true);
     }
 
     private AccountStatementResponse buildConsolidatedStatement(List<UUID> accountIds, YearMonth month) {
@@ -117,7 +126,7 @@ public class EmailDeliveryWorker {
         BigDecimal totalCredit = BigDecimal.ZERO;
         int txCount = 0;
         for (UUID accountId : accountIds) {
-            AccountStatementResponse accountStatement = statementService.getStatement(
+            AccountStatementResponse accountStatement = statementService.getLiveStatement(
                     accountId, month, month, PageRequest.of(0, MAX_EMAIL_STATEMENT_ROWS));
             totalDebit = totalDebit.add(accountStatement.totalDebit());
             totalCredit = totalCredit.add(accountStatement.totalCredit());
@@ -132,5 +141,21 @@ public class EmailDeliveryWorker {
                 .netFlow(totalCredit.subtract(totalDebit))
                 .txCount(txCount)
                 .build();
+    }
+
+    private boolean withinEmptyStatementGracePeriod(EmailLog delivery, OffsetDateTime now) {
+        return delivery.getCreatedAt() == null
+                || now.isBefore(delivery.getCreatedAt().plus(properties.getEmptyStatementGracePeriod()));
+    }
+
+    private record DeliveryContent(
+            String email,
+            String fullName,
+            AccountStatementResponse statement,
+            List<ReportingTransaction> topTransactions,
+            boolean hasTransactions) {
+        private static DeliveryContent empty() {
+            return new DeliveryContent(null, null, null, List.of(), false);
+        }
     }
 }

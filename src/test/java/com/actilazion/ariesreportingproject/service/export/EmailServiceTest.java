@@ -15,8 +15,10 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Properties;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -32,7 +34,7 @@ class EmailServiceTest {
 
     @Test
     @DisplayName("sendMonthlyStatement: builds links from configured public base URL")
-    void sendMonthlyStatement_usesConfiguredPublicBaseUrl() {
+    void sendMonthlyStatement_usesConfiguredPublicBaseUrl() throws Exception {
         AppProperties appProperties = new AppProperties();
         appProperties.setMailFrom("noreply@aries.local");
         appProperties.setPublicBaseUrl("https://reports.example.com/");
@@ -48,7 +50,8 @@ class EmailServiceTest {
                 "User One",
                 "2026-07",
                 statement(),
-                List.of());
+                List.of(),
+                "user-id::2026-07");
 
         ArgumentCaptor<Context> contextCaptor = ArgumentCaptor.forClass(Context.class);
         verify(templateEngine).process(eq("email/monthly-statement"), contextCaptor.capture());
@@ -56,6 +59,11 @@ class EmailServiceTest {
                 .isEqualTo("https://reports.example.com/dashboard");
         assertThat(contextCaptor.getValue().getVariable("unsubscribeUrl"))
                 .isEqualTo("https://reports.example.com/unsubscribe");
+        assertThat(message.getHeader("X-Aries-Idempotency-Key", null))
+                .isEqualTo("user-id::2026-07");
+        assertThat(message.getHeader("Message-ID", null))
+                .isEqualTo("<" + UUID.nameUUIDFromBytes(
+                        "user-id::2026-07".getBytes(StandardCharsets.UTF_8)) + "@aries-reporting>");
         verify(mailSender).send(message);
     }
 

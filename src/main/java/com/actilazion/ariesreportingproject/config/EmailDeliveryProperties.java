@@ -41,6 +41,8 @@ public class EmailDeliveryProperties {
     private Duration retryMaxDelay = Duration.ofHours(1);
     @NotNull
     private Duration rateLimitRetryDelay = Duration.ofMillis(250);
+    @NotNull
+    private Duration emptyStatementGracePeriod = Duration.ofHours(6);
     @Positive
     private double permitsPerSecond = 10.0;
     @Min(1)
@@ -68,5 +70,12 @@ public class EmailDeliveryProperties {
     @AssertTrue(message = "rate-limit-retry-delay must not be negative")
     public boolean isRateLimitRetryDelayValid() {
         return rateLimitRetryDelay != null && !rateLimitRetryDelay.isNegative();
+    }
+
+    @AssertTrue(message = "empty-statement-grace-period must be greater than zero")
+    public boolean isEmptyStatementGracePeriodPositive() {
+        return emptyStatementGracePeriod != null
+                && !emptyStatementGracePeriod.isZero()
+                && !emptyStatementGracePeriod.isNegative();
     }
 }
