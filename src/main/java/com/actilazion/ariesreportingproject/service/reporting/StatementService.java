@@ -77,6 +77,17 @@ public class StatementService {
                     totalDebit = totalDebit.add(snap.get().getTotalDebit());
                     totalCredit = totalCredit.add(snap.get().getTotalCredit());
                     transactionCount += snap.get().getTxCount();
+                } else {
+                    // Snapshot may be temporarily absent after a failed or delayed job.
+                    // Fall back to live reporting aggregates so statements do not look empty.
+                    OffsetDateTime monthStart = monthStart(cursor);
+                    OffsetDateTime monthEnd = monthEndExclusive(cursor);
+                    totalDebit = totalDebit.add(transactionRepository
+                            .sumDebitByAccountAndPeriod(accountId, monthStart, monthEnd));
+                    totalCredit = totalCredit.add(transactionRepository
+                            .sumCreditByAccountAndPeriod(accountId, monthStart, monthEnd));
+                    transactionCount += Math.toIntExact(transactionRepository
+                            .countByAccountAndPeriod(accountId, monthStart, monthEnd));
                 }
                 cursor = cursor.plusMonths(1);
             }

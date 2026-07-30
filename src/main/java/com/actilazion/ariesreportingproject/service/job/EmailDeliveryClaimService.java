@@ -26,9 +26,12 @@ public class EmailDeliveryClaimService {
     }
 
     @Transactional(transactionManager = "reportingTransactionManager")
-    public List<EmailLog> claimDue(OffsetDateTime now) {
+    public List<EmailLog> claimDue(OffsetDateTime now, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
         List<EmailLog> due = emailLogRepository.findDueForUpdate(
-                now, properties.getDispatchBatchSize());
+                now, limit);
         OffsetDateTime leaseUntil = now.plus(properties.getLeaseDuration());
         for (EmailLog delivery : due) {
             delivery.setStatus(EmailStatus.SENDING);

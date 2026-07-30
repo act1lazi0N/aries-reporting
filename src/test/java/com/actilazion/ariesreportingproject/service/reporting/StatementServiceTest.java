@@ -176,6 +176,31 @@ class StatementServiceTest {
     }
 
     @Test
+    @DisplayName("getStatement: missing past snapshot falls back to live aggregates")
+    void getStatement_missingSnapshot_usesLiveAggregates() {
+        YearMonth pastMonth = currentBusinessMonth.minusMonths(1);
+        when(snapshotRepo.findByAccountIdAndYearAndMonth(
+                eq(accountId), eq((short) pastMonth.getYear()),
+                eq((short) pastMonth.getMonthValue())))
+                .thenReturn(Optional.empty());
+        when(txRepo.sumDebitByAccountAndPeriod(eq(accountId), any(), any()))
+                .thenReturn(new BigDecimal("10.00"));
+        when(txRepo.sumCreditByAccountAndPeriod(eq(accountId), any(), any()))
+                .thenReturn(new BigDecimal("25.00"));
+        when(txRepo.countByAccountAndPeriod(eq(accountId), any(), any()))
+                .thenReturn(3L);
+        when(txRepo.findByAccountAndPeriod(eq(accountId), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var result = statementService.getStatement(
+                accountId, pastMonth, pastMonth, PageRequest.of(0, 20));
+
+        assertThat(result.totalDebit()).isEqualByComparingTo("10.00");
+        assertThat(result.totalCredit()).isEqualByComparingTo("25.00");
+        assertThat(result.txCount()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("getStatement: uses Ho Chi Minh half-open month boundaries")
     void getStatement_usesBusinessZoneHalfOpenRange() {
         YearMonth month = YearMonth.of(2026, 8);

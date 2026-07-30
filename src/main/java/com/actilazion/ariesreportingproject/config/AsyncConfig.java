@@ -25,7 +25,7 @@ public class AsyncConfig {
     }
 
     @Bean(name = "emailTaskExecutor")
-    public Executor emailTaskExecutor(EmailDeliveryProperties properties) {
+    public ThreadPoolTaskExecutor emailTaskExecutor(EmailDeliveryProperties properties) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(properties.getWorkerCount());
         executor.setMaxPoolSize(properties.getWorkerCount());

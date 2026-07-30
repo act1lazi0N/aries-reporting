@@ -41,13 +41,13 @@ class EmailDeliveryClaimServiceTest {
                 .status(EmailStatus.PENDING)
                 .build();
         OffsetDateTime now = OffsetDateTime.now(clock);
-        when(emailLogRepository.findDueForUpdate(eq(now), eq(20)))
+        when(emailLogRepository.findDueForUpdate(eq(now), eq(2)))
                 .thenReturn(List.of(delivery));
 
         EmailDeliveryClaimService service = new EmailDeliveryClaimService(
                 emailLogRepository, properties, clock);
 
-        List<EmailLog> claimed = service.claimDue(now);
+        List<EmailLog> claimed = service.claimDue(now, 2);
 
         assertThat(claimed).containsExactly(delivery);
         assertThat(delivery.getStatus()).isEqualTo(EmailStatus.SENDING);
