@@ -19,6 +19,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +38,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class StatementService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final int MIN_STATEMENT_YEAR = 2020;
+    public static final int MAX_STATEMENT_MONTHS = 120;
 
     private final ReportingTransactionRepository transactionRepository;
     private final MonthlySnapshotRepository snapshotRepository;
@@ -220,8 +223,25 @@ public class StatementService {
     }
 
     private void validatePeriod(YearMonth from, YearMonth to) {
+        validateStatementPeriod(from, to);
+    }
+
+    /**
+     * Protects the month-by-month snapshot aggregation from unbounded input.
+     * Kept in the service so non-HTTP callers receive the same domain guard.
+     */
+    public static void validateStatementPeriod(YearMonth from, YearMonth to) {
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("from must be before or equal to to");
+        }
+        if (from.getYear() < MIN_STATEMENT_YEAR) {
+            throw new IllegalArgumentException(
+                    "from year must be greater than or equal to " + MIN_STATEMENT_YEAR);
+        }
+        long monthCount = ChronoUnit.MONTHS.between(from, to) + 1;
+        if (monthCount > MAX_STATEMENT_MONTHS) {
+            throw new IllegalArgumentException(
+                    "statement period must not exceed " + MAX_STATEMENT_MONTHS + " months");
         }
     }
 
