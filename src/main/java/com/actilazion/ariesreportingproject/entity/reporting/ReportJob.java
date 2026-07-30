@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -74,4 +75,8 @@ public class ReportJob {
 
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

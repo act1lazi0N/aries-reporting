@@ -31,3 +31,6 @@ jobs:
 
       - name: Test
         run: ./mvnw test
+
+      - name: PostgreSQL integration test
+        run: ./mvnw -Dit.test=ReportingPostgresEnumIT verify

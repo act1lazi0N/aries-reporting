@@ -10,6 +10,7 @@ import com.actilazion.ariesreportingproject.service.reporting.StatementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +20,8 @@ import java.nio.file.Paths;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.util.UUID;
+
+import jakarta.persistence.OptimisticLockException;
 
 @Slf4j
 @Service
@@ -44,7 +47,12 @@ public class ExportJobProcessor {
         }
 
         job.setStatus(ReportJobStatus.PROCESSING);
-        reportJobRepository.save(job);
+        try {
+            reportJobRepository.saveAndFlush(job);
+        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
+            log.info("[EXPORT] Job claim lost jobId={}", jobId);
+            return;
+        }
 
         try {
             if (job.getJobType() != ReportJobType.ACCOUNT_STATEMENT) {
@@ -86,7 +94,12 @@ public class ExportJobProcessor {
             log.error("[EXPORT] Job failed jobId={}: {}", jobId, e.getMessage(), e);
         }
 
-        reportJobRepository.save(job);
+        try {
+            reportJobRepository.saveAndFlush(job);
+        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
+            deleteGeneratedFile(job);
+            log.info("[EXPORT] Job completion lost claim jobId={}", jobId);
+        }
     }
 
     private String buildFilename(ReportJob job) {
@@ -94,7 +107,20 @@ public class ExportJobProcessor {
             case EXCEL -> "xlsx";
             case PDF -> "pdf";
         };
-        return "report_" + job.getId() + "." + ext;
+        String attempt = job.getVersion() == null ? "" : "_" + job.getVersion();
+        return "report_" + job.getId() + attempt + "." + ext;
+    }
+
+    private void deleteGeneratedFile(ReportJob job) {
+        if (job.getFilePath() == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(Paths.get(job.getFilePath()));
+        } catch (Exception cleanupError) {
+            log.warn("[EXPORT] Failed to remove unclaimed file jobId={}: {}",
+                    job.getId(), cleanupError.getMessage());
+        }
     }
 
     private String publicErrorMessage(Exception e) {
