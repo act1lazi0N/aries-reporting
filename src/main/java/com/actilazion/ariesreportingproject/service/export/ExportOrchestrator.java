@@ -21,6 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +39,7 @@ public class ExportOrchestrator {
 
     @Transactional
     public ReportJobResponse createJob(ExportRequest request, UUID requestedBy, String baseUrl) {
+        validateExportPeriod(request);
         Map<String, Object> params = new HashMap<>();
         params.put("accountId", request.accountId().toString());
         params.put("from", request.from());
@@ -128,6 +131,18 @@ public class ExportOrchestrator {
     private void requireJobAccess(ReportJob job, UUID requestedBy, boolean isAdmin) {
         if (!isAdmin && !job.getRequestedBy().equals(requestedBy)) {
             throw new AccessDeniedException("Access denied to export job");
+        }
+    }
+
+    private void validateExportPeriod(ExportRequest request) {
+        YearMonth from = YearMonth.parse(request.from());
+        YearMonth to = YearMonth.parse(request.to());
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from must be before or equal to to");
+        }
+        long monthCount = ChronoUnit.MONTHS.between(from, to) + 1;
+        if (monthCount > 120) {
+            throw new IllegalArgumentException("export period must not exceed 120 months");
         }
     }
 

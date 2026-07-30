@@ -205,6 +205,30 @@ class ExportJobProcessorTest {
         verify(reportJobRepository, never()).save(job);
     }
 
+    @Test
+    @DisplayName("processJob: does not reopen terminal jobs")
+    void processJob_skipsTerminalJob() {
+        UUID jobId = UUID.randomUUID();
+        ReportJob job = ReportJob.builder()
+                .id(jobId)
+                .status(ReportJobStatus.READY)
+                .build();
+
+        when(reportJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        ExportJobProcessor processor = new ExportJobProcessor(
+                reportJobRepository,
+                statementService,
+                excelExportService,
+                pdfExportService,
+                appProperties);
+
+        processor.processJob(jobId);
+
+        verify(reportJobRepository, never()).saveAndFlush(any());
+        verify(statementService, never()).getStatement(any(), any(), any(), any());
+    }
+
     private void verifyNoGeneratorDispatch() throws Exception {
         verify(excelExportService, never()).generateStatement(any(), any());
         verify(pdfExportService, never()).generateStatement(any(), any());

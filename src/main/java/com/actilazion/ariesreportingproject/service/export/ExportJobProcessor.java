@@ -45,6 +45,12 @@ public class ExportJobProcessor {
         if (job == null) {
             return;
         }
+        if (job.getStatus() != ReportJobStatus.PENDING
+                && job.getStatus() != ReportJobStatus.PROCESSING) {
+            log.info("[EXPORT] Job is terminal; skip processing jobId={} status={}",
+                    jobId, job.getStatus());
+            return;
+        }
 
         job.setStatus(ReportJobStatus.PROCESSING);
         try {

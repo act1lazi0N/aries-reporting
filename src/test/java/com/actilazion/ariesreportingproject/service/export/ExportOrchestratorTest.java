@@ -100,6 +100,32 @@ class ExportOrchestratorTest {
     }
 
     @Test
+    @DisplayName("createJob: rejects inverted export period before persistence")
+    void createJob_rejectsInvertedPeriod() {
+        ExportRequest request = new ExportRequest(
+                UUID.randomUUID(), ReportJobType.ACCOUNT_STATEMENT, ReportFormat.PDF,
+                "2026-03", "2026-01");
+
+        assertThatThrownBy(() -> orchestrator.createJob(request, UUID.randomUUID(), "http://localhost"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("from must be before or equal to to");
+        verify(reportJobRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createJob: rejects exports longer than 120 months")
+    void createJob_rejectsOversizedPeriod() {
+        ExportRequest request = new ExportRequest(
+                UUID.randomUUID(), ReportJobType.ACCOUNT_STATEMENT, ReportFormat.PDF,
+                "2020-01", "2030-01");
+
+        assertThatThrownBy(() -> orchestrator.createJob(request, UUID.randomUUID(), "http://localhost"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("export period must not exceed 120 months");
+        verify(reportJobRepo, never()).save(any());
+    }
+
+    @Test
     @DisplayName("getFileForDownload: throws when job is not READY")
     void getFileForDownload_throwsWhenNotReady() {
         UUID jobId = UUID.randomUUID();

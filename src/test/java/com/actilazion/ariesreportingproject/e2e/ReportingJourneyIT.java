@@ -39,6 +39,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.UUID;
@@ -133,6 +134,7 @@ class ReportingJourneyIT {
     private UUID userAccountId;
     private UUID otherAccountId;
     private UUID transactionId;
+    private YearMonth transactionMonth;
 
     @BeforeAll
     void seedSourceDatabase() throws Exception {
@@ -181,6 +183,7 @@ class ReportingJourneyIT {
             insertAccount(connection, userAccountId, userId, "J10001");
             insertAccount(connection, otherAccountId, otherUserId, "J20001");
             OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(2);
+            transactionMonth = YearMonth.from(createdAt);
             try (PreparedStatement insert = connection.prepareStatement("""
                     INSERT INTO transactions
                     (id, from_account_id, to_account_id, initiated_by, amount, currency,
@@ -221,7 +224,8 @@ class ReportingJourneyIT {
         assertThat(objectMapper.readTree(backfill.body()).path("data").asLong()).isEqualTo(1);
 
         HttpResponse<String> statement = request("GET",
-                "/api/v1/reports/statement?accountId=" + userAccountId + "&from=2026-01&to=2026-12",
+                "/api/v1/reports/statement?accountId=" + userAccountId
+                        + "&from=" + transactionMonth + "&to=" + transactionMonth,
                 userToken(), null);
         assertThat(statement.statusCode()).isEqualTo(200);
         JsonNode statementData = objectMapper.readTree(statement.body()).path("data");
@@ -234,8 +238,8 @@ class ReportingJourneyIT {
                 .put("accountId", userAccountId.toString())
                 .put("jobType", "ACCOUNT_STATEMENT")
                 .put("format", "EXCEL")
-                .put("from", "2026-01")
-                .put("to", "2026-12")
+                .put("from", transactionMonth.toString())
+                .put("to", transactionMonth.toString())
                 .toString();
         HttpResponse<String> export = request("POST", "/api/v1/reports/export/request",
                 userToken(), exportBody);
