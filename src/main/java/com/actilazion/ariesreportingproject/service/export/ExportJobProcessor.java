@@ -48,7 +48,12 @@ public class ExportJobProcessor {
 
         job.setStatus(ReportJobStatus.PROCESSING);
         try {
-            reportJobRepository.saveAndFlush(job);
+            ReportJob claimedJob = reportJobRepository.saveAndFlush(job);
+            // Repository merge may return the managed instance carrying the incremented @Version.
+            // Keep the original for unit-test mocks that return null.
+            if (claimedJob != null) {
+                job = claimedJob;
+            }
         } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
             log.info("[EXPORT] Job claim lost jobId={}", jobId);
             return;
