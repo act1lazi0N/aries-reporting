@@ -1,5 +1,5 @@
 package com.actilazion.ariesreportingproject.enums;
 
 public enum EmailStatus {
-    SENT, FAILED, SKIPPED
+    PENDING, SENDING, SENT, FAILED, SKIPPED
 }

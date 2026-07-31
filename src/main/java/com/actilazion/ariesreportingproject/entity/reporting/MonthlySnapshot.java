@@ -1,7 +1,17 @@
 package com.actilazion.ariesreportingproject.entity.reporting;
 
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -14,7 +24,7 @@ import java.util.UUID;
         name = "monthly_snapshots",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_monthly_account_month",
-                columnNames = {"account_id", "year", "month"}
+                columnNames = {"account_id", "\"year\"", "\"month\""}
         )
 )
 @Getter @Setter
@@ -28,10 +38,10 @@ public class MonthlySnapshot {
     @Column(name = "account_id", nullable = false)
     private UUID accountId;
 
-    @Column(nullable = false)
+    @Column(name = "\"year\"", nullable = false)
     private Short year;
 
-    @Column(nullable = false)
+    @Column(name = "\"month\"", nullable = false)
     private Short month;
 
     @Column(name = "opening_balance", nullable = false, precision = 18, scale = 2)

@@ -1,81 +1,41 @@
 package com.actilazion.ariesreportingproject.service.sync;
 
-import com.actilazion.ariesreportingproject.entity.reporting.ReportingTransaction;
 import com.actilazion.ariesreportingproject.event.TransferCompletedEvent;
-import com.actilazion.ariesreportingproject.repository.reporting.ReportingTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Listens for TransferCompletedEvent and persists it to the reporting DB.
+ * Legacy in-process adapter for TransferCompletedEvent.
  *
- * @Async: runs on a separate thread (exportTaskExecutor), so it does not block
- *   the transfer system's money transfer flow. If this listener fails, the
- *   original transaction has already been committed and is not affected.
+ * Durable cross-service delivery should enter through the same
+ * ReportingEventConsumer contract from a broker/outbox adapter. This listener is
+ * kept only as a compatibility adapter for local Spring event publishers.
  *
- * @Transactional: uses reportingTransactionManager to write to the reporting DB,
- *   not the transfer DB.
- *
- * Idempotency: checks existsByOriginalTxId before inserting, so duplicate events
- *   caused by restarts or retries do not create duplicate rows.
+ * @deprecated Use a durable broker/outbox adapter that calls
+ * {@link ReportingEventConsumer#consumeTransferCompleted(
+ * com.actilazion.ariesreportingproject.dto.integration.TransferCompletedMessage)}.
  */
+@Deprecated(since = "0.0.1", forRemoval = false)
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReportingSyncListener {
-    private final ReportingTransactionRepository reportingTransactionRepository;
+    private final TransferCompletedMessageMapper mapper;
+    private final ReportingEventConsumer reportingEventConsumer;
 
     @Async("exportTaskExecutor")
     @EventListener
-    @Transactional(transactionManager = "reportingTransactionManager")
     public void onTransferCompleted(TransferCompletedEvent event) {
         log.debug("[SYNC] Received event for transactionId={}", event.transactionId());
-
-        // Idempotency check: avoid duplicate inserts when the same event is delivered more than once.
-        if (reportingTransactionRepository.existsByOriginalTxId(event.transactionId())) {
-            log.warn("[SYNC] Duplicate event for transactionId={} - skipped", event.transactionId());
-            return;
-        }
-
         try {
-            ReportingTransaction transaction = mapToReportingTransaction(event);
-            reportingTransactionRepository.save(transaction);
-            log.info("[SYNC] Persisted event for transactionId={}", event.transactionId());
+            reportingEventConsumer.consumeTransferCompleted(mapper.fromLegacyEvent(event));
         } catch (Exception ex) {
-            log.error("[SYNC] Failed to persist event for transactionId={} - {}", event.transactionId(), ex.getMessage(), ex);
+            log.warn("[SYNC] Failed to consume event for transactionId={} - {}",
+                    event.transactionId(), ex.getMessage());
+            log.debug("[SYNC] Legacy event consumption failure", ex);
         }
-    }
-
-    private ReportingTransaction mapToReportingTransaction(
-            TransferCompletedEvent event) {
-
-        // Store dayOfWeek and hourOfDay during sync to avoid computing them during queries.
-        short dayOfWeek = (short) event.createdAt()
-                .getDayOfWeek()
-                .getValue();
-
-        short hourOfDay = (short) event.createdAt().getHour();
-
-        return ReportingTransaction.builder()
-                .originalTxId(event.transactionId())
-                .fromAccountId(event.fromAccountId())
-                .toAccountId(event.toAccountId())
-                .fromOwnerName(event.fromOwnerName())
-                .toOwnerName(event.toOwnerName())
-                .fromAccountNumber(event.fromAccountNumber())
-                .toAccountNumber(event.toAccountNumber())
-                .amount(event.amount())
-                .currency(event.currency())
-                .status(event.status())
-                .description(event.description())
-                .dayOfWeek(dayOfWeek)
-                .hourOfDay(hourOfDay)
-                .createdAt(event.createdAt())
-                .completedAt(event.completedAt())
-                .build();
     }
 }

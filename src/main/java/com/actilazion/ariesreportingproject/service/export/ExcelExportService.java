@@ -2,7 +2,17 @@ package com.actilazion.ariesreportingproject.service.export;
 
 import com.actilazion.ariesreportingproject.dto.response.AccountStatementResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormat;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -122,6 +132,7 @@ public class ExcelExportService {
             log.info("[EXCEL] Generated {} rows at {}", rowNum, outputPath);
         }
     }
+
     // Style factories
     private CellStyle createTitleStyle(Workbook wb) {
         CellStyle style = wb.createCellStyle();
@@ -148,7 +159,7 @@ public class ExcelExportService {
 
     private CellStyle createAmountStyle(Workbook wb) {
         CellStyle style = wb.createCellStyle();
-        DataFormat fmt  = wb.createDataFormat();
+        DataFormat fmt = wb.createDataFormat();
         style.setDataFormat(fmt.getFormat("#,##0.00"));
         style.setAlignment(HorizontalAlignment.RIGHT);
         return style;

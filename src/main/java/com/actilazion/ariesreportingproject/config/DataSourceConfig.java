@@ -1,13 +1,13 @@
 package com.actilazion.ariesreportingproject.config;
 
-import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.core.env.Environment;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
@@ -20,22 +20,29 @@ import java.util.Map;
 
 @Configuration
 @EnableTransactionManagement
-@EnableJpaRepositories(
-        basePackages       = "com.actilazion.ariesreportingproject.repository.reporting",
-        entityManagerFactoryRef = "reportingEntityManagerFactory",
-        transactionManagerRef   = "reportingTransactionManager"
-)
 public class DataSourceConfig {
+    private final Environment environment;
+
+    public DataSourceConfig(Environment environment) {
+        this.environment = environment;
+    }
+
+    @Bean(name = "reportingDataSourceProperties")
+    @ConfigurationProperties("spring.datasource.reporting")
+    public DataSourceProperties reportingDataSourceProperties() {
+        return new DataSourceProperties();
+    }
+
     // Primary
     @Primary
     @Bean(name = "reportingDataSource")
     @ConfigurationProperties("spring.datasource.reporting.hikari")
-    public DataSource reportingDataSource() {
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(
-                System.getProperty("spring.datasource.reporting.url",
-                        "jdbc:postgresql://localhost:5433/aries_reporting_db"));
-        return new HikariDataSource(config);
+    public DataSource reportingDataSource(
+            @Qualifier("reportingDataSourceProperties")
+            DataSourceProperties properties) {
+        return properties.initializeDataSourceBuilder()
+                .type(HikariDataSource.class)
+                .build();
     }
 
     @Primary
@@ -46,9 +53,9 @@ public class DataSourceConfig {
         LocalContainerEntityManagerFactoryBean em =
                 new LocalContainerEntityManagerFactoryBean();
         em.setDataSource(dataSource);
-        em.setPackagesToScan("com.actilazion.aries_reporting.entity.reporting");
+        em.setPackagesToScan("com.actilazion.ariesreportingproject.entity.reporting");
         em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
-        em.setJpaPropertyMap(jpaProperties("validate"));
+        em.setJpaPropertyMap(jpaProperties("validate", true));
         return em;
     }
 
@@ -60,16 +67,23 @@ public class DataSourceConfig {
         return new JpaTransactionManager(emf.getObject());
     }
 
+    @Bean(name = "transactionDataSourceProperties")
+    @ConfigurationProperties("spring.datasource.transaction")
+    public DataSourceProperties transactionDataSourceProperties() {
+        return new DataSourceProperties();
+    }
+
     // Secondary
     @Bean(name = "transactionDataSource")
-    public DataSource transactionDataSource() {
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(
-                System.getProperty("spring.datasource.transaction.url",
-                        "jdbc:postgresql://localhost:5432/aries_transaction_db"));
-        config.setMaximumPoolSize(5);
-        config.setReadOnly(true);
-        return new HikariDataSource(config);
+    @ConfigurationProperties("spring.datasource.transaction.hikari")
+    public DataSource transactionDataSource(
+            @Qualifier("transactionDataSourceProperties")
+            DataSourceProperties properties) {
+        HikariDataSource dataSource = properties.initializeDataSourceBuilder()
+                .type(HikariDataSource.class)
+                .build();
+        dataSource.setReadOnly(true);
+        return dataSource;
     }
 
     @Bean(name = "transactionEntityManagerFactory")
@@ -79,9 +93,9 @@ public class DataSourceConfig {
         LocalContainerEntityManagerFactoryBean em =
                 new LocalContainerEntityManagerFactoryBean();
         em.setDataSource(dataSource);
-        em.setPackagesToScan("com.actilazion.aries_reporting.entity.transaction");
+        em.setPackagesToScan("com.actilazion.ariesreportingproject.entity.transaction");
         em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
-        em.setJpaPropertyMap(jpaProperties("none")); // Không ddl-auto trên DB người khác
+        em.setJpaPropertyMap(jpaProperties("none", false)); // Do not ddl-auto on other user DB
         return em;
     }
 
@@ -93,13 +107,18 @@ public class DataSourceConfig {
     }
 
     // JPA Properties
-    private Map<String, Object> jpaProperties(String ddlAuto) {
+    private Map<String, Object> jpaProperties(String ddlAuto, boolean allowDdlOverride) {
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.hbm2ddl.auto",                ddlAuto);
+        String resolvedDdlAuto = allowDdlOverride
+                ? environment.getProperty("spring.jpa.hibernate.ddl-auto", ddlAuto)
+                : ddlAuto;
+        props.put("hibernate.hbm2ddl.auto", resolvedDdlAuto);
         props.put("hibernate.dialect",
-                "org.hibernate.dialect.PostgreSQLDialect");
-        props.put("hibernate.format_sql",                  true);
-        props.put("hibernate.jdbc.time_zone",              "UTC");
+                environment.getProperty(
+                        "spring.jpa.properties.hibernate.dialect",
+                        "org.hibernate.dialect.PostgreSQLDialect"));
+        props.put("hibernate.format_sql", true);
+        props.put("hibernate.jdbc.time_zone", "UTC");
         return props;
     }
 }

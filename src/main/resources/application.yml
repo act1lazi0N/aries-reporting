@@ -1,0 +1,137 @@
+spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: optional:file:.env[.properties]
+
+---
+
+spring:
+  application:
+    name: aries-reporting
+
+  # Dual DataSource
+  # Auto-config has been turned off in AriesReportingApplication.java
+  # DataSourceConfig.java autowire 2 separated beans
+  datasource:
+    reporting:
+      url: ${SPRING_DATASOURCE_REPORTING_URL}
+      username: ${SPRING_DATASOURCE_REPORTING_USERNAME}
+      password: ${SPRING_DATASOURCE_REPORTING_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 3
+        pool-name: ReportingPool
+
+    transaction:
+      url: ${SPRING_DATASOURCE_TRANSACTION_URL}
+      username: ${SPRING_DATASOURCE_TRANSACTION_USERNAME}
+      password: ${SPRING_DATASOURCE_TRANSACTION_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 5
+        minimum-idle: 2
+        read-only: true
+        pool-name: TransactionPool
+
+  # JPA
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc.time_zone: UTC
+
+  # Flyway
+  flyway:
+    enabled: false
+
+  # Redis
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000ms
+
+  # Mail
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      # Bound network waits so a stalled SMTP server cannot hold a worker past its lease.
+      mail.smtp.connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:10000}
+      mail.smtp.timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:30000}
+      mail.smtp.writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:30000}
+
+  # Quartz
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.jobStore.tablePrefix: QRTZ_
+      org.quartz.scheduler.instanceId: AUTO
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET}
+  issuer: ${JWT_ISSUER:aries-transaction}
+  audience: ${JWT_AUDIENCE:aries-transaction-api}
+  token-type: ${JWT_TOKEN_TYPE:access}
+  clock-skew-seconds: ${JWT_CLOCK_SKEW_SECONDS:30}
+
+# App
+app:
+  reporting:
+    export-dir: ${EXPORT_DIR:/tmp/aries-exports}
+    export-ttl-hours: ${EXPORT_TTL_HOURS:24}
+    mail-from: ${MAIL_FROM}
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:3000}
+    cache-ttl-minutes: ${CACHE_TTL_MINUTES:10}
+    email:
+      active-user-page-size: ${EMAIL_ACTIVE_USER_PAGE_SIZE:100}
+      dispatch-batch-size: ${EMAIL_DISPATCH_BATCH_SIZE:20}
+      worker-count: ${EMAIL_WORKER_COUNT:2}
+      queue-capacity: ${EMAIL_QUEUE_CAPACITY:20}
+      dispatch-delay-ms: ${EMAIL_DISPATCH_DELAY_MS:1000}
+      lease-duration: ${EMAIL_LEASE_DURATION:PT5M}
+      max-attempts: ${EMAIL_MAX_ATTEMPTS:5}
+      retry-base-delay: ${EMAIL_RETRY_BASE_DELAY:PT30S}
+      retry-max-delay: ${EMAIL_RETRY_MAX_DELAY:PT1H}
+      rate-limit-retry-delay: ${EMAIL_RATE_LIMIT_RETRY_DELAY:PT0.25S}
+      # Provisional safety window only; set from measured MQ projection p99 + recovery margin.
+      empty-statement-grace-period: ${EMAIL_EMPTY_STATEMENT_GRACE_PERIOD:PT6H}
+      permits-per-second: ${EMAIL_PERMITS_PER_SECOND:10}
+      burst-capacity: ${EMAIL_BURST_CAPACITY:10}
+      rate-limit-key: ${EMAIL_RATE_LIMIT_KEY:aries:email:rate:smtp}
+    events:
+      rabbit:
+        enabled: ${REPORTING_RABBIT_ENABLED:false}
+        transfer-completed-queue: ${REPORTING_TRANSFER_COMPLETED_QUEUE:transaction.transfer.completed.reporting}
+
+# Server
+server:
+  port: ${SERVER_PORT:8081}
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+# Logging
+logging:
+  level:
+    com.actilazion: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN

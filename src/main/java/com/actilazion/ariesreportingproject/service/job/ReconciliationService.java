@@ -9,6 +9,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 
 /*
  * Compare the transaction counts between the transfer DB and reporting DB every night.
@@ -30,18 +33,27 @@ public class ReconciliationService {
         OffsetDateTime since = OffsetDateTime.now().minusHours(25);
         log.info("[RECON] Starting reconciliation since={}", since);
 
-        long sourceCount = transactionViewRepository.countByCreatedAtAfter(since);
-        long reportingCount = reportingTransactionRepository.countByCreatedAtAfter(since);
+        Set<UUID> sourceIds = new HashSet<>(transactionViewRepository.findIdsByCreatedAtAfter(since));
+        Set<UUID> reportingIds = new HashSet<>(reportingTransactionRepository.findSyncedTxIdsByCreatedAtAfter(since));
+        long sourceCount = sourceIds.size();
+        long reportingCount = reportingIds.size();
 
         log.info("[RECON] Source count={}, reporting count={}", sourceCount, reportingCount);
 
-        if (sourceCount != reportingCount) {
-            long diff = sourceCount - reportingCount;
-            log.warn("[RECON] MISMATCH detected. diff={} - triggering backfill", diff);
+        Set<UUID> missingIds = new HashSet<>(sourceIds);
+        missingIds.removeAll(reportingIds);
 
-            // Backfill the mismatch automatically.
+        Set<UUID> phantomIds = new HashSet<>(reportingIds);
+        phantomIds.removeAll(sourceIds);
+
+        if (!missingIds.isEmpty()) {
+            log.warn("[RECON] Missing reporting transactions detected. missing={} phantom={} - triggering backfill",
+                    missingIds.size(), phantomIds.size());
+
             long synced = backfillService.backfill(since);
             log.info("[RECON] Backfill completed, synced={}", synced);
+        } else if (!phantomIds.isEmpty()) {
+            log.warn("[RECON] Reporting has {} phantom records. Manual investigation required", phantomIds.size());
         } else {
             log.info("[RECON] No mismatch detected");
         }

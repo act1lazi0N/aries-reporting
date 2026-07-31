@@ -15,9 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,8 +37,13 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class StatementService {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    public static final int MIN_STATEMENT_YEAR = 2020;
+    public static final int MAX_STATEMENT_MONTHS = 120;
+
     private final ReportingTransactionRepository transactionRepository;
     private final MonthlySnapshotRepository snapshotRepository;
+    private final Clock clock;
 
     /**
      * Returns an account statement for the requested period.
@@ -48,8 +55,11 @@ public class StatementService {
             YearMonth from,
             YearMonth to,
             Pageable pageable) {
-        YearMonth currentMonth = YearMonth.now();
-        boolean includesCurrentMonth = !to.isBefore(currentMonth);
+        validatePeriod(from, to);
+
+        YearMonth currentMonth = currentBusinessMonth();
+        boolean includesCurrentMonth = !from.isAfter(currentMonth)
+                && !to.isBefore(currentMonth);
 
         BigDecimal totalDebit = BigDecimal.ZERO;
         BigDecimal totalCredit = BigDecimal.ZERO;
@@ -70,30 +80,78 @@ public class StatementService {
                     totalDebit = totalDebit.add(snap.get().getTotalDebit());
                     totalCredit = totalCredit.add(snap.get().getTotalCredit());
                     transactionCount += snap.get().getTxCount();
+                } else {
+                    // Snapshot may be temporarily absent after a failed or delayed job.
+                    // Fall back to live reporting aggregates so statements do not look empty.
+                    OffsetDateTime monthStart = monthStart(cursor);
+                    OffsetDateTime monthEnd = monthEndExclusive(cursor);
+                    totalDebit = totalDebit.add(transactionRepository
+                            .sumDebitByAccountAndPeriod(accountId, monthStart, monthEnd));
+                    totalCredit = totalCredit.add(transactionRepository
+                            .sumCreditByAccountAndPeriod(accountId, monthStart, monthEnd));
+                    transactionCount += Math.toIntExact(transactionRepository
+                            .countByAccountAndPeriod(accountId, monthStart, monthEnd));
                 }
                 cursor = cursor.plusMonths(1);
             }
         }
 
         // Current month: query on the fly.
-        OffsetDateTime periodStart = from.atDay(1)
-                .atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime periodEnd   = to.atEndOfMonth()
-                .atTime(23, 59, 59).atOffset(ZoneOffset.UTC);
+        OffsetDateTime periodStart = monthStart(from);
+        OffsetDateTime periodEnd = monthEndExclusive(to);
         if (includesCurrentMonth) {
-            OffsetDateTime currentMonthStart = currentMonth.atDay(1)
-                    .atStartOfDay().atOffset(ZoneOffset.UTC);
+            OffsetDateTime currentMonthStart = monthStart(currentMonth);
+            OffsetDateTime now = OffsetDateTime.now(clock.withZone(BUSINESS_ZONE));
 
             BigDecimal currentDebit = transactionRepository.sumDebitByAccountAndPeriod(
-                    accountId, currentMonthStart, OffsetDateTime.now());
+                    accountId, currentMonthStart, now);
             BigDecimal currentCredit = transactionRepository.sumCreditByAccountAndPeriod(
-                    accountId, currentMonthStart, OffsetDateTime.now());
+                    accountId, currentMonthStart, now);
+            long currentCount = transactionRepository.countByAccountAndPeriod(
+                    accountId, currentMonthStart, now);
 
-            totalDebit  = totalDebit.add(currentDebit);
+            totalDebit = totalDebit.add(currentDebit);
             totalCredit = totalCredit.add(currentCredit);
+            transactionCount += Math.toIntExact(currentCount);
         }
 
         // Paginated transactions are always queried on the fly.
+        Page<ReportingTransaction> transactions = transactionRepository
+                .findByAccountAndPeriod(accountId, periodStart, periodEnd, pageable);
+
+        return AccountStatementResponse.builder()
+                .accountId(accountId)
+                .periodFrom(from.toString())
+                .periodTo(to.toString())
+                .totalDebit(totalDebit)
+                .totalCredit(totalCredit)
+                .netFlow(totalCredit.subtract(totalDebit))
+                .txCount(transactionCount)
+                .transactions(transactions.map(this::toSummary))
+                .build();
+    }
+
+    /**
+     * Builds a statement directly from reporting transactions.
+     * Monthly email delivery uses this path because a finalized snapshot can
+     * predate a late-arriving message projection.
+     */
+    @Transactional(transactionManager = "reportingTransactionManager", readOnly = true)
+    public AccountStatementResponse getLiveStatement(
+            UUID accountId,
+            YearMonth from,
+            YearMonth to,
+            Pageable pageable) {
+        validatePeriod(from, to);
+
+        OffsetDateTime periodStart = monthStart(from);
+        OffsetDateTime periodEnd = monthEndExclusive(to);
+        BigDecimal totalDebit = transactionRepository.sumDebitByAccountAndPeriod(
+                accountId, periodStart, periodEnd);
+        BigDecimal totalCredit = transactionRepository.sumCreditByAccountAndPeriod(
+                accountId, periodStart, periodEnd);
+        int transactionCount = Math.toIntExact(transactionRepository.countByAccountAndPeriod(
+                accountId, periodStart, periodEnd));
         Page<ReportingTransaction> transactions = transactionRepository
                 .findByAccountAndPeriod(accountId, periodStart, periodEnd, pageable);
 
@@ -117,7 +175,7 @@ public class StatementService {
             UUID accountId, int year, int month
     ) {
         YearMonth ym = YearMonth.of(year, month);
-        YearMonth currentMonth = YearMonth.now();
+        YearMonth currentMonth = currentBusinessMonth();
 
         // Past months use snapshots.
         if (ym.isBefore(currentMonth)) {
@@ -138,12 +196,14 @@ public class StatementService {
                     .orElse(emptyMonthlySummary(accountId, year, month));
         }
 
-        OffsetDateTime start = ym.atDay(1).atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime end = OffsetDateTime.now();
+        OffsetDateTime start = monthStart(ym);
+        OffsetDateTime end = OffsetDateTime.now(clock.withZone(BUSINESS_ZONE));
 
-        BigDecimal debit  = transactionRepository.sumDebitByAccountAndPeriod(
+        BigDecimal debit = transactionRepository.sumDebitByAccountAndPeriod(
                 accountId, start, end);
         BigDecimal credit = transactionRepository.sumCreditByAccountAndPeriod(
+                accountId, start, end);
+        long txCount = transactionRepository.countByAccountAndPeriod(
                 accountId, start, end);
 
         return TransactionSummaryResponse.builder()
@@ -152,7 +212,7 @@ public class StatementService {
                 .month(month)
                 .totalDebit(debit)
                 .totalCredit(credit)
-                .txCount(0)         // On-the-fly txCount can be added with a separate query.
+                .txCount(Math.toIntExact(txCount))
                 .isFromSnapshot(false)
                 .build();
     }
@@ -196,6 +256,41 @@ public class StatementService {
                 .totalDebit(BigDecimal.ZERO).totalCredit(BigDecimal.ZERO)
                 .txCount(0).isFromSnapshot(true)
                 .build();
+    }
+
+    private void validatePeriod(YearMonth from, YearMonth to) {
+        validateStatementPeriod(from, to);
+    }
+
+    /**
+     * Protects the month-by-month snapshot aggregation from unbounded input.
+     * Kept in the service so non-HTTP callers receive the same domain guard.
+     */
+    public static void validateStatementPeriod(YearMonth from, YearMonth to) {
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from must be before or equal to to");
+        }
+        if (from.getYear() < MIN_STATEMENT_YEAR) {
+            throw new IllegalArgumentException(
+                    "from year must be greater than or equal to " + MIN_STATEMENT_YEAR);
+        }
+        long monthCount = ChronoUnit.MONTHS.between(from, to) + 1;
+        if (monthCount > MAX_STATEMENT_MONTHS) {
+            throw new IllegalArgumentException(
+                    "statement period must not exceed " + MAX_STATEMENT_MONTHS + " months");
+        }
+    }
+
+    private YearMonth currentBusinessMonth() {
+        return YearMonth.now(clock.withZone(BUSINESS_ZONE));
+    }
+
+    private OffsetDateTime monthStart(YearMonth month) {
+        return month.atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
+    }
+
+    private OffsetDateTime monthEndExclusive(YearMonth month) {
+        return month.plusMonths(1).atDay(1).atStartOfDay(BUSINESS_ZONE).toOffsetDateTime();
     }
 
 }

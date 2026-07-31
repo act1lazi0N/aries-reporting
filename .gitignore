@@ -6,6 +6,15 @@ target/
 .vscode/
 *.class
 .DS_Store
-logs/
+.codex/logs/
 /app/exports/
 reporting_postgres_data/
+
+#AGENT
+.codex/
+AGENTS.md
+.agents/
+skills-lock.json
+.aiassistant/
+/qodana.yaml
+.ai/

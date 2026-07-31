@@ -1,0 +1,144 @@
+package com.actilazion.ariesreportingproject.service.export;
+
+import com.actilazion.ariesreportingproject.config.AppProperties;
+import com.actilazion.ariesreportingproject.dto.response.AccountStatementResponse;
+import com.actilazion.ariesreportingproject.entity.reporting.ReportJob;
+import com.actilazion.ariesreportingproject.enums.ReportJobStatus;
+import com.actilazion.ariesreportingproject.enums.ReportJobType;
+import com.actilazion.ariesreportingproject.repository.reporting.ReportJobRepository;
+import com.actilazion.ariesreportingproject.service.reporting.StatementService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.util.UUID;
+
+import jakarta.persistence.OptimisticLockException;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ExportJobProcessor {
+    private static final int MAX_EXPORT_ROWS = 10_000;
+    private static final String EXPORT_TOO_LARGE_MESSAGE =
+            "Export exceeds 10000 rows; narrow the requested period";
+    private static final String UNSUPPORTED_JOB_TYPE_MESSAGE = "Unsupported report job type";
+    private static final String EXPORT_FAILED_MESSAGE = "Export failed";
+
+    private final ReportJobRepository reportJobRepository;
+    private final StatementService statementService;
+    private final ExcelExportService excelExportService;
+    private final PdfExportService pdfExportService;
+    private final AppProperties appProperties;
+
+    @Async("exportTaskExecutor")
+    public void processJob(UUID jobId) {
+        ReportJob job = reportJobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
+        if (job.getStatus() != ReportJobStatus.PENDING
+                && job.getStatus() != ReportJobStatus.PROCESSING) {
+            log.info("[EXPORT] Job is terminal; skip processing jobId={} status={}",
+                    jobId, job.getStatus());
+            return;
+        }
+
+        job.setStatus(ReportJobStatus.PROCESSING);
+        try {
+            ReportJob claimedJob = reportJobRepository.saveAndFlush(job);
+            // Repository merge may return the managed instance carrying the incremented @Version.
+            // Keep the original for unit-test mocks that return null.
+            if (claimedJob != null) {
+                job = claimedJob;
+            }
+        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
+            log.info("[EXPORT] Job claim lost jobId={}", jobId);
+            return;
+        }
+
+        try {
+            if (job.getJobType() != ReportJobType.ACCOUNT_STATEMENT) {
+                throw new UnsupportedOperationException(UNSUPPORTED_JOB_TYPE_MESSAGE);
+            }
+
+            UUID accountId = UUID.fromString(job.getParams().get("accountId").toString());
+            YearMonth from = YearMonth.parse(job.getParams().get("from").toString());
+            YearMonth to = YearMonth.parse(job.getParams().get("to").toString());
+
+            AccountStatementResponse statement = statementService.getStatement(
+                    accountId, from, to, PageRequest.of(0, MAX_EXPORT_ROWS));
+            if (statement.transactions() != null
+                    && statement.transactions().getTotalElements() > MAX_EXPORT_ROWS) {
+                throw new IllegalStateException(EXPORT_TOO_LARGE_MESSAGE);
+            }
+
+            Path exportDir = Paths.get(appProperties.getExportDir());
+            Files.createDirectories(exportDir);
+
+            String filename = buildFilename(job);
+            Path filePath = exportDir.resolve(filename);
+
+            switch (job.getFormat()) {
+                case EXCEL -> excelExportService.generateStatement(statement, filePath);
+                case PDF -> pdfExportService.generateStatement(statement, filePath);
+            }
+
+            job.setStatus(ReportJobStatus.READY);
+            job.setFilePath(filePath.toString());
+            job.setCompletedAt(OffsetDateTime.now());
+            job.setExpiresAt(OffsetDateTime.now().plusHours(appProperties.getExportTtlHours()));
+
+            log.info("[EXPORT] Job completed jobId={} file={}", jobId, filename);
+        } catch (Exception e) {
+            job.setStatus(ReportJobStatus.FAILED);
+            job.setErrorMessage(publicErrorMessage(e));
+            job.setCompletedAt(OffsetDateTime.now());
+            log.error("[EXPORT] Job failed jobId={}: {}", jobId, e.getMessage(), e);
+        }
+
+        try {
+            reportJobRepository.saveAndFlush(job);
+        } catch (OptimisticLockException | ObjectOptimisticLockingFailureException e) {
+            deleteGeneratedFile(job);
+            log.info("[EXPORT] Job completion lost claim jobId={}", jobId);
+        }
+    }
+
+    private String buildFilename(ReportJob job) {
+        String ext = switch (job.getFormat()) {
+            case EXCEL -> "xlsx";
+            case PDF -> "pdf";
+        };
+        String attempt = job.getVersion() == null ? "" : "_" + job.getVersion();
+        return "report_" + job.getId() + attempt + "." + ext;
+    }
+
+    private void deleteGeneratedFile(ReportJob job) {
+        if (job.getFilePath() == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(Paths.get(job.getFilePath()));
+        } catch (Exception cleanupError) {
+            log.warn("[EXPORT] Failed to remove unclaimed file jobId={}: {}",
+                    job.getId(), cleanupError.getMessage());
+        }
+    }
+
+    private String publicErrorMessage(Exception e) {
+        if (EXPORT_TOO_LARGE_MESSAGE.equals(e.getMessage())
+                || UNSUPPORTED_JOB_TYPE_MESSAGE.equals(e.getMessage())) {
+            return e.getMessage();
+        }
+        return EXPORT_FAILED_MESSAGE;
+    }
+}

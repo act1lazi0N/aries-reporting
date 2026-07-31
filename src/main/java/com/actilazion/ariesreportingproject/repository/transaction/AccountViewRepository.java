@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -13,4 +14,7 @@ import java.util.UUID;
         readOnly = true
 )
 public interface AccountViewRepository extends JpaRepository<AccountView, UUID> {
+    boolean existsByIdAndUserId(UUID id, UUID userId);
+
+    List<AccountView> findAllByUserId(UUID userId);
 }
