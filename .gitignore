@@ -18,3 +18,4 @@ skills-lock.json
 .aiassistant/
 /qodana.yaml
 .ai/
+.mcp.json
