@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.PrePersist;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,6 +18,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
@@ -50,6 +52,9 @@ public class EmailLog {
     @Column(name = "idempotency_key", nullable = false, length = 100)
     private String idempotencyKey;
 
+    @Column(name = "claim_token", nullable = false)
+    private UUID claimToken;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "email_status")
@@ -59,8 +64,36 @@ public class EmailLog {
     private String errorMessage;
 
     @CreationTimestamp
-    @Column(name = "sent_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "attempt_count", nullable = false)
+    @Builder.Default
+    private int attemptCount = 0;
+
+    @Column(name = "next_attempt_at", nullable = false)
+    private OffsetDateTime nextAttemptAt;
+
+    @Column(name = "lease_until")
+    private OffsetDateTime leaseUntil;
+
+    @Column(name = "sent_at")
     private OffsetDateTime sentAt;
+
+    @PrePersist
+    void initializeDeliveryState() {
+        if (nextAttemptAt == null) {
+            nextAttemptAt = OffsetDateTime.now(java.time.ZoneOffset.UTC);
+        }
+        if (claimToken == null) {
+            claimToken = UUID.randomUUID();
+        }
+    }
+
     public static String buildIdempotencyKey(UUID userId, String billingMonth) {
         return userId.toString() + "::" + billingMonth;
     }

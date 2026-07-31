@@ -6,6 +6,7 @@ import com.actilazion.ariesreportingproject.enums.EmailStatus;
 import com.actilazion.ariesreportingproject.enums.ReportFormat;
 import com.actilazion.ariesreportingproject.enums.ReportJobStatus;
 import com.actilazion.ariesreportingproject.enums.ReportJobType;
+import com.actilazion.ariesreportingproject.repository.reporting.EmailLogRepository;
 import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.hibernate.jpa.HibernatePersistenceProvider;
@@ -20,8 +21,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import java.util.Map;
 import java.util.UUID;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -101,6 +105,39 @@ class ReportingPostgresEnumIT {
                     "select e from EmailLog e where e.status = :status", EmailLog.class)
                     .setParameter("status", EmailStatus.SENDING)
                     .getResultList()).hasSize(1);
+        } finally {
+            if (entityManager.getTransaction().isActive()) {
+                entityManager.getTransaction().rollback();
+            }
+            entityManager.close();
+        }
+    }
+
+    @Test
+    void nativeClaimQuery_supportsPostgresSkipLockedWithoutJpaLockHint() {
+        UUID userId = UUID.randomUUID();
+        String billingMonth = "2026-08";
+        EntityManager entityManager = entityManagerFactory.createEntityManager();
+        EmailLogRepository repository = new JpaRepositoryFactory(entityManager)
+                .getRepository(EmailLogRepository.class);
+
+        try {
+            entityManager.getTransaction().begin();
+            EmailLog emailLog = EmailLog.builder()
+                    .userId(userId)
+                    .billingMonth(billingMonth)
+                    .idempotencyKey(EmailLog.buildIdempotencyKey(userId, billingMonth))
+                    .status(EmailStatus.PENDING)
+                    .nextAttemptAt(OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1))
+                    .build();
+            entityManager.persist(emailLog);
+            entityManager.getTransaction().commit();
+
+            entityManager.getTransaction().begin();
+            assertThat(repository.findDueForUpdate(OffsetDateTime.now(ZoneOffset.UTC), 10))
+                    .extracting(EmailLog::getId)
+                    .containsExactly(emailLog.getId());
+            entityManager.getTransaction().rollback();
         } finally {
             if (entityManager.getTransaction().isActive()) {
                 entityManager.getTransaction().rollback();

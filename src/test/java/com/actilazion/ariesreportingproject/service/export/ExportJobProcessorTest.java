@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import jakarta.persistence.OptimisticLockException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -173,6 +174,59 @@ class ExportJobProcessorTest {
 
         assertThat(job.getStatus()).isEqualTo(ReportJobStatus.FAILED);
         assertThat(job.getErrorMessage()).isEqualTo("Export failed");
+    }
+
+    @Test
+    @DisplayName("processJob: skips generation when another instance wins the claim")
+    void processJob_skipsWhenClaimLost() {
+        UUID jobId = UUID.randomUUID();
+        ReportJob job = ReportJob.builder()
+                .id(jobId)
+                .jobType(ReportJobType.ACCOUNT_STATEMENT)
+                .format(ReportFormat.PDF)
+                .status(ReportJobStatus.PROCESSING)
+                .params(Map.of())
+                .build();
+
+        when(reportJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        doThrow(new OptimisticLockException())
+                .when(reportJobRepository).saveAndFlush(job);
+
+        ExportJobProcessor processor = new ExportJobProcessor(
+                reportJobRepository,
+                statementService,
+                excelExportService,
+                pdfExportService,
+                appProperties);
+
+        processor.processJob(jobId);
+
+        verify(statementService, never()).getStatement(any(), any(), any(), any());
+        verify(reportJobRepository, never()).save(job);
+    }
+
+    @Test
+    @DisplayName("processJob: does not reopen terminal jobs")
+    void processJob_skipsTerminalJob() {
+        UUID jobId = UUID.randomUUID();
+        ReportJob job = ReportJob.builder()
+                .id(jobId)
+                .status(ReportJobStatus.READY)
+                .build();
+
+        when(reportJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        ExportJobProcessor processor = new ExportJobProcessor(
+                reportJobRepository,
+                statementService,
+                excelExportService,
+                pdfExportService,
+                appProperties);
+
+        processor.processJob(jobId);
+
+        verify(reportJobRepository, never()).saveAndFlush(any());
+        verify(statementService, never()).getStatement(any(), any(), any(), any());
     }
 
     private void verifyNoGeneratorDispatch() throws Exception {

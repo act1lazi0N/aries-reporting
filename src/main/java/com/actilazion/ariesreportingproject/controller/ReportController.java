@@ -61,10 +61,13 @@ public class ReportController {
     ) {
         userAccessService.requireAccountAccess(userDetails, accountId);
         validatePageable(pageable);
+        YearMonth fromMonth = parseYearMonth(from, "from");
+        YearMonth toMonth = parseYearMonth(to, "to");
+        StatementService.validateStatementPeriod(fromMonth, toMonth);
         AccountStatementResponse res = statementService.getStatement(
                 accountId,
-                parseYearMonth(from, "from"),
-                parseYearMonth(to, "to"),
+                fromMonth,
+                toMonth,
                 pageable
         );
         return ResponseEntity.ok(ApiResponse.ok(res));

@@ -45,6 +45,24 @@ class ReportControllerValidationTest {
     }
 
     @Test
+    @DisplayName("getStatement: rejects an unbounded month range")
+    void getStatement_excessiveMonthRange_throwsBadRequestCause() {
+        assertThatThrownBy(() -> controller.getStatement(
+                UUID.randomUUID(), "2020-01", "2030-01", PageRequest.of(0, 20), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("statement period must not exceed 120 months");
+    }
+
+    @Test
+    @DisplayName("getStatement: rejects months before the reporting retention boundary")
+    void getStatement_beforeMinimumYear_throwsBadRequestCause() {
+        assertThatThrownBy(() -> controller.getStatement(
+                UUID.randomUUID(), "2019-12", "2020-01", PageRequest.of(0, 20), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("from year must be greater than or equal to 2020");
+    }
+
+    @Test
     @DisplayName("getMonthlySummary: rejects invalid month")
     void getMonthlySummary_invalidMonth_throwsBadRequestCause() {
         assertThatThrownBy(() -> controller.getMonthlySummary(

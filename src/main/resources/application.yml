@@ -64,6 +64,10 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      # Bound network waits so a stalled SMTP server cannot hold a worker past its lease.
+      mail.smtp.connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT_MS:10000}
+      mail.smtp.timeout: ${MAIL_SMTP_READ_TIMEOUT_MS:30000}
+      mail.smtp.writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT_MS:30000}
 
   # Quartz
   quartz:
@@ -90,6 +94,22 @@ app:
     mail-from: ${MAIL_FROM}
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:3000}
     cache-ttl-minutes: ${CACHE_TTL_MINUTES:10}
+    email:
+      active-user-page-size: ${EMAIL_ACTIVE_USER_PAGE_SIZE:100}
+      dispatch-batch-size: ${EMAIL_DISPATCH_BATCH_SIZE:20}
+      worker-count: ${EMAIL_WORKER_COUNT:2}
+      queue-capacity: ${EMAIL_QUEUE_CAPACITY:20}
+      dispatch-delay-ms: ${EMAIL_DISPATCH_DELAY_MS:1000}
+      lease-duration: ${EMAIL_LEASE_DURATION:PT5M}
+      max-attempts: ${EMAIL_MAX_ATTEMPTS:5}
+      retry-base-delay: ${EMAIL_RETRY_BASE_DELAY:PT30S}
+      retry-max-delay: ${EMAIL_RETRY_MAX_DELAY:PT1H}
+      rate-limit-retry-delay: ${EMAIL_RATE_LIMIT_RETRY_DELAY:PT0.25S}
+      # Provisional safety window only; set from measured MQ projection p99 + recovery margin.
+      empty-statement-grace-period: ${EMAIL_EMPTY_STATEMENT_GRACE_PERIOD:PT6H}
+      permits-per-second: ${EMAIL_PERMITS_PER_SECOND:10}
+      burst-capacity: ${EMAIL_BURST_CAPACITY:10}
+      rate-limit-key: ${EMAIL_RATE_LIMIT_KEY:aries:email:rate:smtp}
     events:
       rabbit:
         enabled: ${REPORTING_RABBIT_ENABLED:false}

@@ -28,3 +28,6 @@ jobs:
         run: |
           chmod +x ./mvnw
           ./mvnw test
+
+      - name: PostgreSQL integration test
+        run: ./mvnw -Dit.test=ReportingPostgresEnumIT verify

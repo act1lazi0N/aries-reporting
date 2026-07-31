@@ -26,7 +26,19 @@ public class EmailService {
     private final TemplateEngine templateEngine;
     private final AppProperties appProperties;
 
-    public void sendMonthlyStatement(String recipientEmail, String fullName, String billingMonth, AccountStatementResponse statement, List<ReportingTransaction> topTransactions) {
+    /**
+     * Sends through generic SMTP via JavaMailSender. SMTP servers are not
+     * assumed to deduplicate Message-ID or custom headers; delivery is
+     * therefore at-least-once unless the configured provider explicitly
+     * offers idempotent send semantics and is integrated through that API.
+     */
+    public void sendMonthlyStatement(
+            String recipientEmail,
+            String fullName,
+            String billingMonth,
+            AccountStatementResponse statement,
+            List<ReportingTransaction> topTransactions,
+            String idempotencyKey) {
         try {
             String html = buildHtml(
                     fullName, billingMonth, statement, topTransactions);
@@ -38,6 +50,12 @@ public class EmailService {
             helper.setSubject(
                     "[Aries] Monthly Statement — " + billingMonth);
             helper.setText(html, true);
+            String messageId = "<"
+                    + UUID.nameUUIDFromBytes(idempotencyKey.getBytes(StandardCharsets.UTF_8))
+                    + "@aries-reporting>";
+            // SMTP itself is at-least-once; providers must deduplicate this stable identity.
+            message.setHeader("Message-ID", messageId);
+            message.setHeader("X-Aries-Idempotency-Key", idempotencyKey);
             mailSender.send(message);
             log.info("[EMAIL] Sent monthly statement recipientRef={} month={}",
                     recipientRef(recipientEmail), billingMonth);
